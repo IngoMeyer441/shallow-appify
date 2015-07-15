@@ -72,27 +72,61 @@ class TemporaryDirectory(object):
         self.tmp_dir = None
 
 
+class Arguments(object):
+    def __init__(self, **kwargs):
+        for key, value in kwargs.iteritems():
+            setattr(self, key, property(value))
+
+    def __getitem__(self, item):
+        return getattr(self, item)
+
+    def keys(self):
+        keys = [key for key in self.__dict__ if isinstance(key, property)]
+        return keys
+
+
 def parse_args():
-    parser = argparse.ArgumentParser(description='''
-    Creates a runnable application for Mac OS X with references to
-    system libraries. Therefore, the built app will NOT be self-contained.''')
-    parser.add_argument('-d', '--source-directory', dest='source_directory_path', action='store', type=os.path.abspath,
-                        help='Defines the source root directory that will be included in the app.')
-    parser.add_argument('-i', '--icon', dest='icon', action='store', type=os.path.abspath,
-                        help='Image file that is used for app icon creation. It must be quadratic with a resolution of 1024x1024 pixels or more.')
-    parser.add_argument('-e', '--environment', dest='environ', action='store', nargs='+',
-                        help='Specifies which environment varibles -- set on the current interpreter startup -- shall be included in the app bundle.')
-    parser.add_argument('-o', '--output', dest='output', action='store', type=os.path.abspath,
-                        help='Sets the path the app will be saved to.')
-    parser.add_argument('-v', '--version', dest='version', action='store',
-                        help='Specifies the version string of the program.')
-    parser.add_argument('excutable_path', action='store', type=os.path.abspath, required=True,
-                        help='Sets the executable that is started when the app is opened.')
-    args = parser.parse_args()
+    def parse_commandline():
+        parser = argparse.ArgumentParser(description='''
+        Creates a runnable application for Mac OS X with references to
+        system libraries. Therefore, the built app will NOT be self-contained.''')
+        parser.add_argument('-d', '--source-directory', dest='source_directory_path', action='store', type=os.path.abspath,
+                            help='Defines the source root directory that will be included in the app.')
+        parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
+                            help='Image file that is used for app icon creation. It must be quadratic with a resolution of 1024x1024 pixels or more.')
+        parser.add_argument('-e', '--environment', dest='environment_keys', action='store', nargs='+',
+                            help='Specifies which environment varibles -- set on the current interpreter startup -- shall be included in the app bundle.')
+        parser.add_argument('-o', '--output', dest='app_path', action='store', type=os.path.abspath,
+                            help='Sets the path the app will be saved to.')
+        parser.add_argument('-v', '--version', dest='version_string', action='store',
+                            help='Specifies the version string of the program.')
+        parser.add_argument('executable_path', action='store', type=os.path.abspath, required=True,
+                            help='Sets the executable that is started when the app is opened.')
+        args = parser.parse_args()
+        return args
 
-    return args
+    args = parse_commandline()
+    source_directory_path = args.source_directory_path
+    icon_path = args.icon_path
+    environment_keys = args.environment_keys
+    if args.app_path is not None:
+        app_path = args.app_path
+    else:
+        app_path = '{path_without_ext}.app'.format(os.path.splitext(os.path.abspath(args.executable_path)))
+    if args.version_string is not None:
+        version_string = args.version_string
+    else:
+        version_string = '0.0.0'
+    executable_path = os.path.abspath(args.executable_path)
 
-def create_info_plist_content(app_name, version, executable_path, source_root_path=None, icon_path=None, environment_variable_list=None):
+    return Arguments(source_directory_path=source_directory_path,
+                     icon_path=icon_path,
+                     environment_keys=environment_keys,
+                     app_path=app_path,
+                     version_string=version_string,
+                     executable_path=executable_path)
+
+def create_info_plist_content(app_name, version, executable_path, source_root_path=None, icon_path=None, environment_keys=None):
     def get_short_version(version):
         match_obj = re.search('\d+\.\d+(\.\d+)?', version)
         if match_obj is not None:
@@ -109,8 +143,8 @@ def create_info_plist_content(app_name, version, executable_path, source_root_pa
             'short_version': get_short_version(version),
             'version': version}
 
-    if environment_variable_list is not None:
-        environment_variables = dict(((key, os.environ[key]) for key in environment_variable_list))
+    if environment_keys is not None:
+        environment_variables = dict(((key, os.environ[key]) for key in environment_keys))
         vars.update(environment_variables)
 
     template = Template(INFO_PLIST_TEMPLATE)
@@ -129,11 +163,32 @@ def create_icon_set(icon_path, iconset_out_path):
             resized_icon.save('{icns_dir}/{icon_name}'.format(icns_dir=tmp_icns_dir, icon_name=name))
         subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
-def create_app(app_path, version, executable_path, source_root_path=None, icon_path=None, environment_variable_list=None):
-    pass
+def create_app(app_path, version_string, executable_path, source_root_path=None, icon_path=None, environment_keys=None):
+    def abs_path(relative_bundle_path, base=None):
+        return '{app_path}/{dir}'.format(app_path=app_path if base is None else base, dir=relative_bundle_path)
+
+    directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
+    contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)
+    bundle_icon_path = abs_path('Icon.icns', resources_path) if icon_path is not None else None
+    app_name = os.path.splitext(os.path.basename(app_path))[0]
+
+    for current_path in (abs_path(dir) for dir in directory_structure):
+        os.makedirs(current_path)
+    if icon_path is not None:
+        create_icon_set(icon_path, bundle_icon_path)
+    info_plist_content = create_info_plist_content(app_name, version_string, executable_path, source_root_path,
+                                                   bundle_icon_path, environment_keys)
+    with open(abs_path('Icon.icns', contents_path) , 'w') as f:
+        f.writelines(info_plist_content)
+    if source_root_path is None:
+        shutil.copy(executable_path, macos_path)
+    else:
+        os.rmdir(macos_path)
+        shutil.copytree(source_root_path, macos_path)
 
 def main():
-    pass
+    args = parse_args()
+    create_app(**args)
 
 
 if __name__ == '__main__':
