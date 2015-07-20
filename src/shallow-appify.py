@@ -49,7 +49,7 @@ INFO_PLIST_TEMPLATE = '''
     <string>{{ icon_file }}</string>
     {% endif -%}
     <key>CFBundleIdentifier</key>
-    <string>de.fz-juelich.{{ name }}</string>
+    <string>undefined.{{ name }}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -141,6 +141,13 @@ class Arguments(object):
         return self._members.keys()
 
 
+class MissingIconError(Exception):
+    pass
+
+class AppAlreadyExistingError(Exception):
+    pass
+
+
 def parse_args():
     def parse_commandline():
         parser = argparse.ArgumentParser(description='''
@@ -198,10 +205,10 @@ def parse_args():
 
 def create_info_plist_content(app_name, version, executable_path, executable_root_path=None, icon_path=None, environment_vars=None):
     def get_short_version(version):
-        match_obj = re.search('\d+\.\d+(\.\d+)?', version)
+        match_obj = re.search('\d+(\.\d+){0,2}', version)
         if match_obj is not None:
             short_version = match_obj.group()
-            if not re.match('\d+\.\d+\.\d+', short_version):
+            while not re.match('\d+\.\d+\.\d+', short_version):
                 short_version += '.0'
         else:
             short_version = '0.0.0'
@@ -310,11 +317,16 @@ def create_app(app_path, version_string, executable_path, executable_root_path=N
     else:
         app_executable_path = os.path.basename(executable_path)
 
+    if os.path.exists(abs_path('.')):
+        raise AppAlreadyExistingError('The app path {app_path} already exists.'.format(app_path=app_path))
     for current_path in (abs_path(dir) for dir in directory_structure):
         os.makedirs(current_path)
     copy_source()
     if icon_path is not None:
-        create_icon_set(icon_path, bundle_icon_path)
+        try:
+            create_icon_set(icon_path, bundle_icon_path)
+        except IOError as e:
+            raise MissingIconError(e)
     setup_result = StartupSetup.setup_startup(os.path.splitext(app_executable_path)[1])
     if setup_result is not NotImplemented:
         app_executable_path = setup_result
@@ -324,7 +336,10 @@ def create_app(app_path, version_string, executable_path, executable_root_path=N
 
 def main():
     args = parse_args()
-    create_app(**args)
+    try:
+        create_app(**args)
+    except Exception as e:
+        sys.stderr.write('Error: {message}\n'.format(message=e))
 
 
 if __name__ == '__main__':
