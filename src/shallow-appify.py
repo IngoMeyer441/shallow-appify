@@ -18,6 +18,7 @@ import os.path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from jinja2 import Template
 from PIL import Image
@@ -145,43 +146,57 @@ def parse_args():
         parser = argparse.ArgumentParser(description='''
         Creates a runnable application for Mac OS X with references to
         system libraries. Therefore, the built app will NOT be self-contained.''')
-        parser.add_argument('-d', '--source-directory', dest='source_root_path', action='store', type=os.path.abspath,
-                            help='Defines the source root directory that will be included in the app.')
+        parser.add_argument('-d', '--executable-directory', dest='executable_root_path', action='store', type=os.path.abspath,
+                            help='Defines the executable root directory that will be included in the app.')
         parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
                             help='Image file that is used for app icon creation. It must be quadratic with a resolution of 1024x1024 pixels or more.')
-        parser.add_argument('-e', '--environment', dest='environment_keys', action='store', nargs='+',
-                            help='Specifies which environment varibles -- set on the current interpreter startup -- shall be included in the app bundle.')
+        parser.add_argument('-e', '--environment', dest='environment_vars', action='store', nargs='+',
+                            help='Specifies which environment variables -- set on the current interpreter startup -- shall be included in the app bundle.')
         parser.add_argument('-o', '--output', dest='app_path', action='store', type=os.path.abspath,
                             help='Sets the path the app will be saved to.')
         parser.add_argument('-v', '--version', dest='version_string', action='store',
                             help='Specifies the version string of the program.')
         parser.add_argument('executable_path', action='store', type=os.path.abspath,
                             help='Sets the executable that is started when the app is opened.')
+        if len(sys.argv) < 2:
+            parser.print_help()
+            sys.exit(1)
         args = parser.parse_args()
         return args
 
+    def map_environment_arguments_to_dict(enviroment_argument_list):
+        if enviroment_argument_list is not None:
+            keys_and_values = [item.split('=') for item in enviroment_argument_list]
+            for item in keys_and_values:
+                if len(item) < 2:
+                    item.append(os.environ[item[0]])
+            result = dict(keys_and_values)
+        else:
+            result = None
+        return result
+
     args = parse_commandline()
-    source_root_path = args.source_root_path
+    executable_root_path = args.executable_root_path
     icon_path = args.icon_path
-    environment_keys = args.environment_keys
+    environment_vars = map_environment_arguments_to_dict(args.environment_vars)
     if args.app_path is not None:
         app_path = args.app_path
     else:
-        app_path = '{path_without_ext}.app'.format(path_without_ext=os.path.splitext(os.path.abspath(args.executable_path))[0])
+        app_path = '{basename_without_ext}.app'.format(basename_without_ext=os.path.splitext(os.path.basename(os.path.abspath(args.executable_path)))[0])
     if args.version_string is not None:
         version_string = args.version_string
     else:
         version_string = '0.0.0'
     executable_path = os.path.abspath(args.executable_path)
 
-    return Arguments(source_root_path=source_root_path,
+    return Arguments(executable_root_path=executable_root_path,
                      icon_path=icon_path,
-                     environment_keys=environment_keys,
+                     environment_vars=environment_vars,
                      app_path=app_path,
                      version_string=version_string,
                      executable_path=executable_path)
 
-def create_info_plist_content(app_name, version, executable_path, source_root_path=None, icon_path=None, environment_keys=None):
+def create_info_plist_content(app_name, version, executable_path, executable_root_path=None, icon_path=None, environment_vars=None):
     def get_short_version(version):
         match_obj = re.search('\d+\.\d+(\.\d+)?', version)
         if match_obj is not None:
@@ -192,17 +207,17 @@ def create_info_plist_content(app_name, version, executable_path, source_root_pa
             short_version = '0.0.0'
         return short_version
 
-    if source_root_path is None:
-        source_root_path = os.path.dirname(executable_path)
+    if executable_root_path is None:
+        executable_root_path = os.path.dirname(executable_path)
 
-    vars = {'executable': os.path.relpath(executable_path, source_root_path),
+    vars = {'executable': os.path.relpath(executable_path, executable_root_path),
             'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
             'name': app_name,
             'short_version': get_short_version(version),
             'version': version}
 
-    if environment_keys is not None:
-        environment_variables = dict(((key, os.environ[key]) for key in environment_keys))
+    if environment_vars is not None:
+        environment_variables = dict(((key, os.environ[key]) for key in environment_vars))
         vars['environment'] = environment_variables
 
     template = Template(INFO_PLIST_TEMPLATE)
@@ -228,21 +243,13 @@ def create_icon_set(icon_path, iconset_out_path):
             resized_icon.save('{icns_dir}/{icon_name}'.format(icns_dir=tmp_icns_dir, icon_name=name))
         subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
-def create_app(app_path, version_string, executable_path, source_root_path=None, icon_path=None, environment_keys=None):
+def create_app(app_path, version_string, executable_path, executable_root_path=None, icon_path=None, environment_vars=None):
     def abs_path(relative_bundle_path, base=None):
         return '{app_path}/{dir}'.format(app_path=app_path if base is None else base, dir=relative_bundle_path)
 
-    def setup_python_startup():
-        main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
-        python_startup_script = create_python_startup_script(main_module)
-        new_executable_path = abs_path('___startup___.py', macos_path)
-        with open(new_executable_path, 'w') as f:
-            f.writelines(python_startup_script.encode('utf-8'))
-        return new_executable_path
-
     def write_info_plist():
-        info_plist_content = create_info_plist_content(app_name, version_string, app_executable_path, source_root_path,
-                                                       bundle_icon_path, environment_keys)
+        info_plist_content = create_info_plist_content(app_name, version_string, app_executable_path, executable_root_path,
+                                                       bundle_icon_path, environment_vars)
         with open(abs_path('Info.plist', contents_path) , 'w') as f:
             f.writelines(info_plist_content.encode('utf-8'))
 
@@ -251,21 +258,55 @@ def create_app(app_path, version_string, executable_path, source_root_path=None,
             f.write(PKG_INFO_CONTENT)
 
     def copy_source():
-        if source_root_path is None:
+        if executable_root_path is None:
             shutil.copy(executable_path, macos_path)
         else:
             os.rmdir(macos_path)
-            shutil.copytree(source_root_path, macos_path)
+            shutil.copytree(executable_root_path, macos_path)
 
     def set_file_permissions():
-        os.chmod(app_executable_path, 0555)
+        os.chmod(abs_path(app_executable_path, macos_path), 0555)
+
+    class StartupSetup(object):
+        '''
+        Class that contains functions to handle the startup of specific program types, e.g. python scripts.
+        Extend with more methods to support further languages if necessary. To do so, add a static method
+        named '_<program-file-extension>_startup' and create an own startup script. The variable
+        'app_executable_path' contains the relative path in the app bundle to the original executable file.
+        The method must return the path to newly created startup script.
+        See '_py_startup' as an example.
+        '''
+        @staticmethod
+        def _py_startup():
+            main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
+            python_startup_script = create_python_startup_script(main_module)
+            new_executable_path = '___startup___.py'
+            with open(abs_path(new_executable_path, macos_path), 'w') as f:
+                f.writelines(python_startup_script.encode('utf-8'))
+            return new_executable_path
+
+        @classmethod
+        def setup_startup(cls, file_ext):
+            if file_ext.startswith('.'):
+                file_ext = file_ext[1:]
+            if not hasattr(cls, '_ext2func'):
+                cls._ext2func = {}
+                for key, value in cls.__dict__.iteritems():
+                    match = re.search('_[a-z]+_startup', key)
+                    if match:
+                        cls._ext2func[match.group()[1:-len('_startup')]] = value
+            if file_ext in cls._ext2func:
+                return cls._ext2func[file_ext].__func__()
+            else:
+                return NotImplemented
+
 
     directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
     contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)
     bundle_icon_path = abs_path('Icon.icns', resources_path) if icon_path is not None else None
     app_name = os.path.splitext(os.path.basename(app_path))[0]
-    if source_root_path is not None:
-        app_executable_path = os.path.relpath(executable_path, source_root_path)
+    if executable_root_path is not None:
+        app_executable_path = os.path.relpath(executable_path, executable_root_path)
     else:
         app_executable_path = os.path.basename(executable_path)
 
@@ -274,8 +315,9 @@ def create_app(app_path, version_string, executable_path, source_root_path=None,
     copy_source()
     if icon_path is not None:
         create_icon_set(icon_path, bundle_icon_path)
-    if app_executable_path.endswith('.py'):
-        app_executable_path = setup_python_startup()
+    setup_result = StartupSetup.setup_startup(os.path.splitext(app_executable_path)[1])
+    if setup_result is not NotImplemented:
+        app_executable_path = setup_result
     write_info_plist()
     write_pkg_info()
     set_file_permissions()
