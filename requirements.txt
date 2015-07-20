@@ -1,0 +1,4 @@
+Jinja2==2.7.3
+MarkupSafe==0.23
+PIL==1.1.7
+wheel==0.24.0
