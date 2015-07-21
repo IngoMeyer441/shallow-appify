@@ -9,7 +9,7 @@ from __future__ import absolute_import
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
 
-__version_info__ = (0, 1, 0)
+__version_info__ = (0, 1, 1)
 __version__ = '.'.join(map(str, __version_info__))
 
 import argparse
@@ -147,12 +147,15 @@ class MissingIconError(Exception):
 class AppAlreadyExistingError(Exception):
     pass
 
+class InvalidAppPath(Exception):
+    pass
+
 
 def parse_args():
     def parse_commandline():
         parser = argparse.ArgumentParser(description='''
         Creates a runnable application for Mac OS X with references to
-        system libraries. Therefore, the built app will NOT be self-contained.''')
+        system libraries. The result is a NON-self-contained app bundle.''')
         parser.add_argument('-d', '--executable-directory', dest='executable_root_path', action='store', type=os.path.abspath,
                             help='Defines the executable root directory that will be included in the app.')
         parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
@@ -194,7 +197,7 @@ def parse_args():
         version_string = args.version_string
     else:
         version_string = '0.0.0'
-    executable_path = os.path.abspath(args.executable_path)
+    executable_path = args.executable_path
 
     return Arguments(executable_root_path=executable_root_path,
                      icon_path=icon_path,
@@ -217,7 +220,12 @@ def create_info_plist_content(app_name, version, executable_path, executable_roo
     if executable_root_path is None:
         executable_root_path = os.path.dirname(executable_path)
 
-    vars = {'executable': os.path.relpath(executable_path, executable_root_path),
+    if os.path.abspath(executable_path).startswith(os.path.abspath(executable_root_path)):
+        executable = os.path.relpath(executable_path, executable_root_path)
+    else:
+        executable = executable_path
+
+    vars = {'executable': executable,
             'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
             'name': app_name,
             'short_version': get_short_version(version),
@@ -252,7 +260,13 @@ def create_icon_set(icon_path, iconset_out_path):
 
 def create_app(app_path, version_string, executable_path, executable_root_path=None, icon_path=None, environment_vars=None):
     def abs_path(relative_bundle_path, base=None):
-        return '{app_path}/{dir}'.format(app_path=app_path if base is None else base, dir=relative_bundle_path)
+        return os.path.abspath('{app_path}/{dir}'.format(app_path=app_path if base is None else base, dir=relative_bundle_path))
+
+    def error_checks():
+        if os.path.exists(abs_path('.')):
+            raise AppAlreadyExistingError('The app path {app_path} already exists.'.format(app_path=app_path))
+        if abs_path('.').startswith(os.path.abspath(executable_root_path)):
+            raise InvalidAppPath('The specified app path is a subpath of the source root directory.')
 
     def write_info_plist():
         info_plist_content = create_info_plist_content(app_name, version_string, app_executable_path, executable_root_path,
@@ -317,8 +331,8 @@ def create_app(app_path, version_string, executable_path, executable_root_path=N
     else:
         app_executable_path = os.path.basename(executable_path)
 
-    if os.path.exists(abs_path('.')):
-        raise AppAlreadyExistingError('The app path {app_path} already exists.'.format(app_path=app_path))
+    error_checks()
+
     for current_path in (abs_path(dir) for dir in directory_structure):
         os.makedirs(current_path)
     copy_source()
