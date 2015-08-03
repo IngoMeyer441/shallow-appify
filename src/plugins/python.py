@@ -1,0 +1,134 @@
+# coding: utf-8
+
+from __future__ import print_function
+from __future__ import unicode_literals
+from __future__ import division
+from __future__ import absolute_import
+
+__author__ = 'Ingo Heimbach'
+__email__ = 'i.heimbach@fz-juelich.de'
+
+import itertools
+import os
+import subprocess
+from jinja2 import Template
+
+
+PY_PRE_STARTUP_CONDA_SETUP = '''
+#!/bin/bash
+SCRIPT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
+cd ${SCRIPT_DIR}
+source ../Resources/conda_env/bin/activate ../Resources/conda_env
+python __startup__.py
+'''.strip()
+
+PY_STARTUP_SCRIPT = '''
+#!/usr/bin/env python
+# coding: utf-8
+
+from __future__ import unicode_literals
+
+import os
+import os.path
+from xml.etree import ElementTree as ET
+from Foundation import NSBundle
+
+def fix_current_working_directory():
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+def set_cf_keys():
+    bundle = NSBundle.mainBundle()
+    bundle_info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+    info_plist = ET.parse('../Info.plist')
+    root = info_plist.getroot()
+    plist_dict = root.find('dict')
+    current_key = None
+    for child in plist_dict:
+        if child.tag == 'key' and child.text.startswith('CF'):  # CoreFoundation key
+            current_key = child.text
+        elif current_key is not None:
+            bundle_info[current_key] = child.text
+            current_key = None
+
+def main():
+    fix_current_working_directory()
+    set_cf_keys()
+    import {{ main_module }}
+    {{ main_module }}.main()    # a main function is required
+if __name__ == '__main__':
+    main()
+'''.strip()
+
+
+_plugin_name_ = 'Python'
+_file_ext_ = 'py'
+
+_PY_STARTUP_SCRIPT_NAME = '__startup__.py'
+_ENV_STARTUP_SCRIPT_NAME = '__startup__.sh'
+_CONDA_DEFAULT_PACKAGES = ('pyobjc-framework-cocoa', )
+_CONDA_DEFAULT_CHANNELS = ('https://conda.binstar.org/erik', )
+
+_create_conda_env = False
+_requirements_file = None
+_conda_channels = None
+
+def get_command_line_arguments():
+    arguments = [(('--conda', ), {'dest': 'conda_req_file', 'action': 'store', 'type': os.path.abspath,
+                                  'help': 'Creates a miniconda environment from the given conda requirements file and includes it in the app bundle. Can be used to create self-contained python apps.'}),
+                 (('--conda-channels', ), {'dest': 'conda_channels', 'action': 'store', 'nargs': '+',
+                                           'help': 'A list of custom conda channels to install packages that are not included in the main anaconda distribution.'})]
+    return arguments
+
+def parse_command_line_arguments(args):
+    global _create_conda_env, _requirements_file, _conda_channels
+
+    checked_args = {}
+    if args.conda_req_file is not None:
+        checked_args['python_conda'] = args.conda_req_file
+        _requirements_file = args.conda_req_file
+        _create_conda_env = True
+        if args.conda_channels is not None:
+            _conda_channels = args.conda_channels
+    return checked_args
+
+def pre_create_app(**kwargs):
+    pass
+
+def setup_startup(app_path, executable_path, app_executable_path, executable_root_path, macos_path, resources_path):
+    def create_python_startup_script(main_module):
+        template = Template(PY_STARTUP_SCRIPT)
+        startup_script = template.render(main_module=main_module)
+        return startup_script
+
+    def create_conda_env():
+        conda_channels = _conda_channels or []
+
+        with open(os.devnull, 'w') as dummy:
+            env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
+            subprocess.call(['conda', 'create', '-p', env_path,
+                             '--file', _requirements_file, '--copy', '--quiet', '--yes']
+                            + list(itertools.chain(*[('-c', channel) for channel in conda_channels])),
+                            stdout=dummy, stderr=dummy)
+            subprocess.call(' '.join(['source', '{env_path}/bin/activate'.format(env_path=env_path), env_path, ';',
+                             'conda', 'install', '--copy', '--quiet', '--yes']
+                            + list(_CONDA_DEFAULT_PACKAGES)
+                            + list(itertools.chain(*[('-c', channel) for channel in _CONDA_DEFAULT_CHANNELS]))),
+                            stdout=dummy, stderr=dummy, shell=True)
+
+    main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
+    python_startup_script = create_python_startup_script(main_module)
+    with open('{macos}/{startup}'.format(macos=macos_path, startup=_PY_STARTUP_SCRIPT_NAME), 'w') as f:
+        f.writelines(python_startup_script.encode('utf-8'))
+    if _create_conda_env:
+        create_conda_env()
+        env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
+        with open('{macos}/{startup}'.format(macos=macos_path, startup=_ENV_STARTUP_SCRIPT_NAME), 'w') as f:
+            f.writelines(env_startup_script.encode('utf-8'))
+        new_executable_path = _ENV_STARTUP_SCRIPT_NAME
+    else:
+        new_executable_path = _PY_STARTUP_SCRIPT_NAME
+
+    return new_executable_path
+
+def post_create_app(**kwargs):
+    pass
