@@ -8,6 +8,7 @@ from __future__ import absolute_import
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
 
+import fnmatch
 import itertools
 import os
 import subprocess
@@ -72,6 +73,14 @@ _create_conda_env = False
 _requirements_file = None
 _conda_channels = None
 
+
+class CondaError(Exception):
+    pass
+
+class LibPatchingError(Exception):
+    pass
+
+
 def get_command_line_arguments():
     arguments = [(('--conda', ), {'dest': 'conda_req_file', 'action': 'store', 'type': os.path.abspath,
                                   'help': 'Creates a miniconda environment from the given conda requirements file and includes it in the app bundle. Can be used to create self-contained python apps.'}),
@@ -100,20 +109,43 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         startup_script = template.render(main_module=main_module)
         return startup_script
 
-    def create_conda_env():
-        conda_channels = _conda_channels or []
+    def patch_lib_python(env_path):
+        env_path = os.path.abspath(env_path)
+        python_dir_path = '{env_path}/bin'.format(env_path=env_path)
+        lib_pattern = 'libpython*.dylib'
+        lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
+        python_lib_pathes = tuple(['{lib_dir_path}/{path}'.format(lib_dir_path=lib_dir_path, path=path)
+                                   for path in os.listdir(lib_dir_path) if fnmatch.fnmatch(path, lib_pattern)])
+        for python_lib_path in python_lib_pathes:
+            rel_python_lib_path = '@executable_path/{rel_path}'.format(rel_path=os.path.relpath(python_lib_path, python_dir_path))
+            with open(os.devnull, 'w') as dummy:
+                try:
+                    subprocess.check_call(['install_name_tool', '-id', rel_python_lib_path, python_lib_path],
+                                          stdout=dummy, stderr=dummy)
+                except subprocess.CalledProcessError:
+                    raise LibPatchingError('Could not patch the anaconda python library.')
 
-        with open(os.devnull, 'w') as dummy:
-            env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
-            subprocess.call(['conda', 'create', '-p', env_path,
-                             '--file', _requirements_file, '--copy', '--quiet', '--yes']
-                            + list(itertools.chain(*[('-c', channel) for channel in conda_channels])),
-                            stdout=dummy, stderr=dummy)
-            subprocess.call(' '.join(['source', '{env_path}/bin/activate'.format(env_path=env_path), env_path, ';',
-                             'conda', 'install', '--copy', '--quiet', '--yes']
-                            + list(_CONDA_DEFAULT_PACKAGES)
-                            + list(itertools.chain(*[('-c', channel) for channel in _CONDA_DEFAULT_CHANNELS]))),
-                            stdout=dummy, stderr=dummy, shell=True)
+    def create_conda_env():
+        def create_env():
+            conda_channels = _conda_channels or []
+            with open(os.devnull, 'w') as dummy:
+                env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
+                try:
+                    subprocess.check_call(['conda', 'create', '-p', env_path,
+                                           '--file', _requirements_file, '--copy', '--quiet', '--yes']
+                                          + list(itertools.chain(*[('-c', channel) for channel in conda_channels])),
+                                          stdout=dummy, stderr=dummy)
+                    subprocess.check_call(' '.join(['source', '{env_path}/bin/activate'.format(env_path=env_path), env_path, ';',
+                                                    'conda', 'install', '--copy', '--quiet', '--yes']
+                                                   + list(_CONDA_DEFAULT_PACKAGES)
+                                                   + list(itertools.chain(*[('-c', channel) for channel in _CONDA_DEFAULT_CHANNELS]))),
+                                          stdout=dummy, stderr=dummy, shell=True)
+                except subprocess.CalledProcessError:
+                    raise CondaError('The conda environment could not be installed.')
+            return env_path
+
+        env_path = create_env()
+        patch_lib_python(env_path)
 
     main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
     python_startup_script = create_python_startup_script(main_module)
