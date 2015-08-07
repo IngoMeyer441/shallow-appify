@@ -68,10 +68,13 @@ _PY_STARTUP_SCRIPT_NAME = '__startup__.py'
 _ENV_STARTUP_SCRIPT_NAME = '__startup__.sh'
 _CONDA_DEFAULT_PACKAGES = ('pyobjc-framework-cocoa', )
 _CONDA_DEFAULT_CHANNELS = ('https://conda.binstar.org/erik', )
+_EXT_PYLIB_VARIABLE = 'PYLIBPATH'
+_EXT_MAKEFILE_TARGET = 'app_extension_modules'
 
 _create_conda_env = False
 _requirements_file = None
 _conda_channels = None
+_extension_makefile = None
 
 
 class CondaError(Exception):
@@ -80,16 +83,21 @@ class CondaError(Exception):
 class LibPatchingError(Exception):
     pass
 
+class ExtensionModuleError(Exception):
+    pass
+
 
 def get_command_line_arguments():
     arguments = [(('--conda', ), {'dest': 'conda_req_file', 'action': 'store', 'type': os.path.abspath,
                                   'help': 'Creates a miniconda environment from the given conda requirements file and includes it in the app bundle. Can be used to create self-contained python apps.'}),
                  (('--conda-channels', ), {'dest': 'conda_channels', 'action': 'store', 'nargs': '+',
-                                           'help': 'A list of custom conda channels to install packages that are not included in the main anaconda distribution.'})]
+                                           'help': 'A list of custom conda channels to install packages that are not included in the main anaconda distribution.'}),
+                 (('--extension-makefile', ), {'dest': 'extension_makefile', 'action': 'store', 'type': os.path.abspath,
+                                               'help': 'Path to a makefile for building python extension modules. The makefile is called with the target "{target}" and a variable "{libvariable}" that holds the path to the conda python library.'.format(target=_EXT_MAKEFILE_TARGET, libvariable=_EXT_PYLIB_VARIABLE)})]
     return arguments
 
 def parse_command_line_arguments(args):
-    global _create_conda_env, _requirements_file, _conda_channels
+    global _create_conda_env, _requirements_file, _conda_channels, _extension_makefile
 
     checked_args = {}
     if args.conda_req_file is not None:
@@ -98,6 +106,8 @@ def parse_command_line_arguments(args):
         _create_conda_env = True
         if args.conda_channels is not None:
             _conda_channels = args.conda_channels
+        if args.extension_makefile is not None:
+            _extension_makefile = args.extension_makefile
     return checked_args
 
 def pre_create_app(**kwargs):
@@ -147,12 +157,37 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         env_path = create_env()
         patch_lib_python(env_path)
 
+    def build_extension_modules(env_path):
+        def get_makefile_path():
+            if executable_root_path is not None and \
+               _extension_makefile.startswith(os.path.abspath(executable_root_path)):
+                makefile_path = '{macos_path}/{rel_makefile_path}'.format(macos_path=macos_path,
+                                                                          rel_makefile_path=os.path.relpath(_extension_makefile, executable_root_path))
+            else:
+                makefile_path = _extension_makefile
+            return makefile_path
+
+        env_path = os.path.abspath(env_path)
+        lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
+        makefile_path = get_makefile_path()
+        makefile_dir_path = os.path.dirname(makefile_path)
+        with open(os.devnull, 'w') as dummy:
+            try:
+                subprocess.check_call(['make', '-C', makefile_dir_path,
+                                       _EXT_MAKEFILE_TARGET,
+                                       '{var}={lib_dir_path}'.format(var=_EXT_PYLIB_VARIABLE, lib_dir_path=lib_dir_path)],
+                                      stdout=dummy, stderr=dummy)
+            except subprocess.CalledProcessError:
+                raise ExtensionModuleError('Extension modules could not be built.')
+
     main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
     python_startup_script = create_python_startup_script(main_module)
     with open('{macos}/{startup}'.format(macos=macos_path, startup=_PY_STARTUP_SCRIPT_NAME), 'w') as f:
         f.writelines(python_startup_script.encode('utf-8'))
     if _create_conda_env:
         create_conda_env()
+        if _extension_makefile is not None:
+            build_extension_modules(env_path='{resources}/{env}'.format(resources=resources_path, env='conda_env'))
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
         with open('{macos}/{startup}'.format(macos=macos_path, startup=_ENV_STARTUP_SCRIPT_NAME), 'w') as f:
             f.writelines(env_startup_script.encode('utf-8'))
