@@ -12,7 +12,6 @@ import re
 import shutil
 import subprocess
 from jinja2 import Template
-from .util import libpatch
 from .util import command
 
 
@@ -75,18 +74,12 @@ _CONDA_DEFAULT_PACKAGES = ('pyobjc-framework-cocoa', )
 _CONDA_DEFAULT_CHANNELS = ('https://conda.binstar.org/erik', )
 _EXT_PYLIB_VARIABLE = 'PYLIBPATH'
 _EXT_MAKEFILE_TARGET = 'app_extension_modules'
-_GR_LIB_COPY_DICT = {'/opt/X11/lib': 'lib/X11'}
-_GR_LIB_DIR_PATHS_TO_PATCH = ('lib/X11', 'lib/python2.7/site-packages/gr', 'lib/python2.7/site-packages/gr3')
-_GR_OLD_TO_NEW_DEPENDENCY_DICT = {'/opt/X11/': '@executable_path/../lib/X11/',
-                                  '/usr/local/qt-4.8/lib/': '@executable_path/../lib/'}
-# TODO: add support for more libraries, for example wxWidgets
 
 
 _create_conda_env = False
 _requirements_file = None
 _conda_channels = None
 _extension_makefile = None
-_conda_gr_included = False
 
 
 class CondaError(Exception):
@@ -119,12 +112,7 @@ def get_command_line_arguments():
 
 
 def parse_command_line_arguments(args):
-    global _create_conda_env, _requirements_file, _conda_channels, _extension_makefile, _conda_gr_included
-
-    def is_gr_in_conda_requirements(requirements_file):
-        with open(requirements_file, 'r') as f:
-            found_gr = any((line.startswith('gr=') for line in f))
-        return found_gr
+    global _create_conda_env, _requirements_file, _conda_channels, _extension_makefile
 
     checked_args = {}
     if args.conda_req_file is not None:
@@ -135,7 +123,6 @@ def parse_command_line_arguments(args):
             _conda_channels = args.conda_channels
         if args.extension_makefile is not None:
             _extension_makefile = args.extension_makefile
-        _conda_gr_included = is_gr_in_conda_requirements(_requirements_file)
     return checked_args
 
 
@@ -268,20 +255,6 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         fix_conda_shebang()
         copy_missing_conda_packages()
 
-    def fix_conda_gr(env_path):
-        def copy_missing_dependencies():
-            for src, dst in _GR_LIB_COPY_DICT.iteritems():
-                shutil.copytree(src, '{env_path}/{relative_dst}'.format(env_path=env_path, relative_dst=dst))
-
-        def patch_lib_dependencies():
-            lib_dir_paths = tuple(('{env_path}/{relative_lib_path}'.format(env_path=env_path,
-                                                                           relative_lib_path=lib_path)
-                                   for lib_path in _GR_LIB_DIR_PATHS_TO_PATCH))
-            libpatch.patch_libs(lib_dir_paths, _GR_OLD_TO_NEW_DEPENDENCY_DICT)
-
-        copy_missing_dependencies()
-        patch_lib_dependencies()
-
     def build_extension_modules(env_path):
         def get_makefile_path():
             if executable_root_path is not None and \
@@ -312,8 +285,6 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
     if _create_conda_env:
         env_path = create_conda_env()
         make_conda_portable(env_path)
-        if _conda_gr_included:
-            fix_conda_gr(env_path)
         if _extension_makefile is not None:
             build_extension_modules(env_path)
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
