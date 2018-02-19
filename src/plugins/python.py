@@ -118,6 +118,10 @@ class LibPatchingError(Exception):
     pass
 
 
+class PrecompileError(Exception):
+    pass
+
+
 class ExtensionModuleError(Exception):
     pass
 
@@ -336,6 +340,14 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
 
         create_missing_library_links()
 
+    def precompile_python_files():
+        with open(os.devnull, 'w') as dummy:
+            try:
+                subprocess.check_call(['python', '-m', 'compileall', macos_path],
+                                      stdout=dummy, stderr=dummy)
+            except subprocess.CalledProcessError:
+                raise PrecompileError('Python modules could not be precompiled.')
+
     def build_extension_modules(env_path):
         def get_makefile_path():
             if executable_root_path is not None and \
@@ -368,6 +380,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         make_conda_portable(env_path)
         if _conda_gr_included:
             fix_conda_gr(env_path)
+        precompile_python_files()
         if _extension_makefile is not None:
             build_extension_modules(env_path)
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
