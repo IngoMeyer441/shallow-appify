@@ -66,7 +66,7 @@ INFO_PLIST_TEMPLATE = '''
     <string>APPL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
-    {% if hide_in_dock -%}
+    {% if hidden -%}
     <key>LSUIElement</key>
     <string>1</string>
     {% endif -%}
@@ -130,12 +130,16 @@ def parse_args():
         parser.add_argument('-d', '--executable-directory', dest='executable_root_path', action='store',
                             type=os.path.abspath,
                             help='Defines the executable root directory that will be included in the app.')
-        parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
-                            help='Image file that is used for app icon creation. It must be quadratic with a '
-                                 'resolution of 1024x1024 pixels or more.')
         parser.add_argument('-e', '--environment', dest='environment_vars', action='store', nargs='+',
                             help='Specifies which environment variables -- set on the current interpreter startup -- '
                                  ' shall be included in the app bundle.')
+        parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
+                            help='Image file that is used for app icon creation. It must be quadratic with a '
+                                 'resolution of 1024x1024 pixels or more.')
+        parser.add_argument('-g', '--group', dest='group', action='store',
+                            help='Developer group name that is saved to the internal app plist.')
+        parser.add_argument('-n', '--hidden', dest='hidden', action='store',
+                            help='Hides the app icon in the dock when given.')
         parser.add_argument('-o', '--output', dest='app_path', action='store', type=os.path.abspath,
                             help='Sets the path the app will be saved to.')
         parser.add_argument('-v', '--version', dest='version_string', action='store',
@@ -183,8 +187,8 @@ def parse_args():
     return Arguments(**args)
 
 
-def create_info_plist_content(app_name, version, executable_path, executable_root_path=None, icon_path=None,
-                              environment_vars=None):
+def create_info_plist_content(app_name, version, group, executable_path, executable_root_path=None, icon_path=None,
+                              hidden=False, environment_vars=None):
     def get_short_version(version):
         match_obj = re.search('\d+(\.\d+){0,2}', version)
         if match_obj is not None:
@@ -206,6 +210,8 @@ def create_info_plist_content(app_name, version, executable_path, executable_roo
     vars = {'executable': executable,
             'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
             'name': app_name,
+            'group': group,
+            'hidden': hidden,
             'short_version': get_short_version(version),
             'version': version}
 
@@ -232,8 +238,8 @@ def create_icon_set(icon_path, iconset_out_path):
         subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
 
-def create_app(app_path, version_string, executable_path, executable_root_path=None, icon_path=None,
-               environment_vars=None, **kwargs):
+def create_app(app_path, version_string, group, executable_path, executable_root_path=None, icon_path=None,
+               hidden=False, environment_vars=None, **kwargs):
     def abs_path(relative_bundle_path, base=None):
         return os.path.abspath('{app_path}/{dir}'.format(app_path=base or app_path, dir=relative_bundle_path))
 
@@ -244,8 +250,8 @@ def create_app(app_path, version_string, executable_path, executable_root_path=N
             raise InvalidAppPath('The specified app path is a subpath of the source root directory.')
 
     def write_info_plist():
-        info_plist_content = create_info_plist_content(app_name, version_string, app_executable_path,
-                                                       executable_root_path, bundle_icon_path, environment_vars)
+        info_plist_content = create_info_plist_content(app_name, version_string, group, app_executable_path,
+                                                       executable_root_path, bundle_icon_path, hidden, environment_vars)
         with open(abs_path('Info.plist', contents_path), 'w') as f:
             f.writelines(info_plist_content.encode('utf-8'))
 
