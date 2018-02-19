@@ -76,10 +76,14 @@ def set_cf_keys():
     plist_dict = root.find('dict')
     current_key = None
     for child in plist_dict:
-        if child.tag == 'key' and child.text.startswith('CF'):  # CoreFoundation key
+        if child.tag == 'key' and (child.text.startswith('CF') or   # CoreFoundation key
+                                   child.text in ['LSUIElement', 'NSSupportsAutomaticGraphicsSwitching']):
             current_key = child.text
         elif current_key is not None:
-            bundle_info[current_key] = child.text
+            if child.text is not None:
+                bundle_info[current_key] = child.text
+            else:
+                bundle_info[current_key] = (child.tag == 'true')
             current_key = None
 
 def main():

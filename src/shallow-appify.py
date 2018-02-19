@@ -51,7 +51,7 @@ INFO_PLIST_TEMPLATE = '''
     <string>{{ icon_file }}</string>
     {% endif -%}
     <key>CFBundleIdentifier</key>
-    <string>undefined.{{ name }}</string>
+    <string>{{ group }}.{{ name }}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
@@ -66,6 +66,12 @@ INFO_PLIST_TEMPLATE = '''
     <string>APPL</string>
     <key>CFBundleSignature</key>
     <string>????</string>
+    {% if hide_in_dock -%}
+    <key>LSUIElement</key>
+    <string>1</string>
+    {% endif -%}
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
 </dict>
 </plist>
 '''.strip()
