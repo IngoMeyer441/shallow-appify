@@ -91,7 +91,7 @@ def _pkg_init():
     _ext2module = {}
     for importer, module_name, is_package in pkgutil.iter_modules(__path__):
         if not is_package:
-            current_module = importlib.import_module('.{module_name}'.format(module_name=module_name), 'plugins')
+            current_module = importlib.import_module('.{module_name}'.format(module_name=module_name), __name__)
             _modules[module_name] = current_module
             _ext2module[current_module._file_ext_] = current_module
 

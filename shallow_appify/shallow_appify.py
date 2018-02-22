@@ -7,9 +7,9 @@ from __future__ import division
 from __future__ import absolute_import
 
 import argparse
+import logging
 import os
 import os.path
-import plugins
 import re
 import shutil
 import subprocess
@@ -17,15 +17,11 @@ import sys
 import tempfile
 from jinja2 import Template
 from PIL import Image
-import logging
+from . import plugins
 logging.basicConfig(level=logging.WARNING)
-
 
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
-
-__version_info__ = (0, 2, 1)
-__version__ = '.'.join(map(str, __version_info__))
 
 
 INFO_PLIST_TEMPLATE = '''
