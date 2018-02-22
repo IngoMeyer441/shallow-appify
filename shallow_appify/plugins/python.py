@@ -15,10 +15,8 @@ from jinja2 import Template
 from .util import command
 from .util.binary_replace import binary_replace
 
-
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
-
 
 PY_PRE_STARTUP_CONDA_SETUP = '''
 #!/bin/bash
@@ -95,7 +93,6 @@ if __name__ == '__main__':
     main()
 '''.strip()
 
-
 _plugin_name_ = 'Python'
 _file_ext_ = 'py'
 
@@ -105,7 +102,6 @@ _CONDA_DEFAULT_PACKAGES = ('pyobjc-framework-cocoa', )
 _CONDA_DEFAULT_CHANNELS = ('https://conda.binstar.org/erik', )
 _EXT_PYLIB_VARIABLE = 'PYLIBPATH'
 _EXT_MAKEFILE_TARGET = 'app_extension_modules'
-
 
 _create_conda_env = False
 _requirements_file = None
@@ -131,19 +127,48 @@ class ExtensionModuleError(Exception):
 
 
 def get_command_line_arguments():
-    arguments = [(('--conda', ), {'dest': 'conda_req_file', 'action': 'store', 'type': os.path.abspath,
-                                  'help': 'Creates a miniconda environment from the given conda requirements file '
-                                          'and includes it in the app bundle. Can be used to create self-contained '
-                                          'python apps.'}),
-                 (('--conda-channels', ), {'dest': 'conda_channels', 'action': 'store', 'nargs': '+',
-                                           'help': 'A list of custom conda channels to install packages that are not '
-                                                   'included in the main anaconda distribution.'}),
-                 (('--extension-makefile', ), {'dest': 'extension_makefile', 'action': 'store', 'type': os.path.abspath,
-                                               'help': 'Path to a makefile for building python extension modules. The '
-                                                       'makefile is called with the target "{target}" and a variable '
-                                                       '"{libvariable}" that holds the path to the conda python '
-                                                       'library.'.format(target=_EXT_MAKEFILE_TARGET,
-                                                                         libvariable=_EXT_PYLIB_VARIABLE)})]
+    arguments = [
+        (
+            ('--conda', ), {
+                'dest':
+                'conda_req_file',
+                'action':
+                'store',
+                'type':
+                os.path.abspath,
+                'help':
+                'Creates a miniconda environment from the given conda requirements file '
+                'and includes it in the app bundle. Can be used to create self-contained '
+                'python apps.'
+            }
+        ), (
+            ('--conda-channels', ), {
+                'dest':
+                'conda_channels',
+                'action':
+                'store',
+                'nargs':
+                '+',
+                'help':
+                'A list of custom conda channels to install packages that are not '
+                'included in the main anaconda distribution.'
+            }
+        ), (
+            ('--extension-makefile', ), {
+                'dest':
+                'extension_makefile',
+                'action':
+                'store',
+                'type':
+                os.path.abspath,
+                'help':
+                'Path to a makefile for building python extension modules. The '
+                'makefile is called with the target "{target}" and a variable '
+                '"{libvariable}" that holds the path to the conda python '
+                'library.'.format(target=_EXT_MAKEFILE_TARGET, libvariable=_EXT_PYLIB_VARIABLE)
+            }
+        )
+    ]
     return arguments
 
 
@@ -183,15 +208,21 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         python_dir_path = '{env_path}/bin'.format(env_path=env_path)
         lib_pattern = 'libpython*.dylib'
         lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
-        python_lib_pathes = tuple(['{lib_dir_path}/{path}'.format(lib_dir_path=lib_dir_path, path=path)
-                                   for path in os.listdir(lib_dir_path) if fnmatch.fnmatch(path, lib_pattern)])
+        python_lib_pathes = tuple(
+            [
+                '{lib_dir_path}/{path}'.format(lib_dir_path=lib_dir_path, path=path)
+                for path in os.listdir(lib_dir_path) if fnmatch.fnmatch(path, lib_pattern)
+            ]
+        )
         for python_lib_path in python_lib_pathes:
-            rel_python_lib_path = '@executable_path/{rel_path}'.format(rel_path=os.path.relpath(python_lib_path,
-                                                                                                python_dir_path))
+            rel_python_lib_path = '@executable_path/{rel_path}'.format(
+                rel_path=os.path.relpath(python_lib_path, python_dir_path)
+            )
             with open(os.devnull, 'w') as dummy:
                 try:
-                    subprocess.check_call(['install_name_tool', '-id', rel_python_lib_path, python_lib_path],
-                                          stdout=dummy, stderr=dummy)
+                    subprocess.check_call(
+                        ['install_name_tool', '-id', rel_python_lib_path, python_lib_path], stdout=dummy, stderr=dummy
+                    )
                 except subprocess.CalledProcessError:
                     raise LibPatchingError('Could not patch the anaconda python library.')
 
@@ -201,16 +232,24 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             with open(os.devnull, 'w') as dummy:
                 env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
                 try:
-                    subprocess.check_call(['conda', 'create', '-p', env_path,
-                                           '--file', _requirements_file, '--copy', '--quiet', '--yes'] +
-                                          list(itertools.chain(*[('-c', channel) for channel in conda_channels])),
-                                          stdout=dummy, stderr=dummy)
-                    subprocess.check_call(' '.join(['source', '{env_path}/bin/activate'.format(env_path=env_path),
-                                                    env_path, ';', 'conda', 'install', '--copy', '--quiet', '--yes'] +
-                                                   list(_CONDA_DEFAULT_PACKAGES) +
-                                                   list(itertools.chain(*[('-c', channel)
-                                                                          for channel in _CONDA_DEFAULT_CHANNELS]))),
-                                          stdout=dummy, stderr=dummy, shell=True)
+                    subprocess.check_call(
+                        ['conda', 'create', '-p', env_path, '--file', _requirements_file, '--copy', '--quiet', '--yes']
+                        + list(itertools.chain(*[('-c', channel) for channel in conda_channels])),
+                        stdout=dummy,
+                        stderr=dummy
+                    )
+                    subprocess.check_call(
+                        ' '.join(
+                            [
+                                'source', '{env_path}/bin/activate'.format(env_path=env_path), env_path, ';', 'conda',
+                                'install', '--copy', '--quiet', '--yes'
+                            ] + list(_CONDA_DEFAULT_PACKAGES) +
+                            list(itertools.chain(*[('-c', channel) for channel in _CONDA_DEFAULT_CHANNELS]))
+                        ),
+                        stdout=dummy,
+                        stderr=dummy,
+                        shell=True
+                    )
                 except subprocess.CalledProcessError:
                     raise CondaError('The conda environment could not be installed.')
             return env_path
@@ -228,10 +267,14 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             for root_path, dirnames, filenames in os.walk(env_path):
                 dirpaths = [os.path.join(root_path, dirname) for dirname in dirnames]
                 filepaths = [os.path.join(root_path, filename) for filename in filenames]
-                link_dirpaths = [dirpath for dirpath in dirpaths if os.path.islink(dirpath) and
-                                 not os.path.realpath(dirpath).startswith(env_path)]
-                link_filepaths = [filepath for filepath in filepaths if os.path.islink(filepath) and
-                                  not os.path.realpath(filepath).startswith(env_path)]
+                link_dirpaths = [
+                    dirpath for dirpath in dirpaths
+                    if os.path.islink(dirpath) and not os.path.realpath(dirpath).startswith(env_path)
+                ]
+                link_filepaths = [
+                    filepath for filepath in filepaths
+                    if os.path.islink(filepath) and not os.path.realpath(filepath).startswith(env_path)
+                ]
                 for link_dirpath in link_dirpaths:
                     real_dirpath = os.path.realpath(link_dirpath)
                     os.remove(link_dirpath)
@@ -246,8 +289,9 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             DELETE_LINE_COUNT = 5
             REPLACE_LINE_PART = '_NEW_PART='
             REPLACE_LINE_INSERT = '_NEW_PART=$_CONDA_DIR'
-            full_conda_activate_path = '{env_path}/{conda_activate_path}'.format(env_path=env_path,
-                                                                                 conda_activate_path=CONDA_ACTIVATE_PATH)
+            full_conda_activate_path = '{env_path}/{conda_activate_path}'.format(
+                env_path=env_path, conda_activate_path=CONDA_ACTIVATE_PATH
+            )
             found_line_to_delete = False
             found_line_to_replace = False
             skip_line_num = 0
@@ -272,8 +316,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 f.writelines(new_lines)
 
         def fix_conda_shebang():
-            full_conda_bin_path = '{env_path}/{conda_bin_path}'.format(env_path=env_path,
-                                                                       conda_bin_path=CONDA_BIN_PATH)
+            full_conda_bin_path = '{env_path}/{conda_bin_path}'.format(env_path=env_path, conda_bin_path=CONDA_BIN_PATH)
             with open(full_conda_bin_path, 'r') as f:
                 lines = f.readlines()
             # replace shebang line
@@ -297,19 +340,28 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 return anaconda_dir_path
 
             system_anaconda_root_path = get_system_anaconda_root_path()
-            full_anaconda_python_packages_path = '{system_anaconda_root}/{relative_packages_path}'.format(system_anaconda_root=system_anaconda_root_path,
-                                                                                                          relative_packages_path=ANACONDA_PYTHON_PACKAGES_PATH)
-            full_condaenv_python_packages_path = '{env_path}/{relative_packages_path}'.format(env_path=env_path,
-                                                                                              relative_packages_path=CONDAENV_PYTHON_PACKAGES_PATH)
+            full_anaconda_python_packages_path = '{system_anaconda_root}/{relative_packages_path}'.format(
+                system_anaconda_root=system_anaconda_root_path, relative_packages_path=ANACONDA_PYTHON_PACKAGES_PATH
+            )
+            full_condaenv_python_packages_path = '{env_path}/{relative_packages_path}'.format(
+                env_path=env_path, relative_packages_path=CONDAENV_PYTHON_PACKAGES_PATH
+            )
             for package in CONDA_MISSING_PACKAGES:
-                shutil.copytree('{system_anaconda_packages_root_path}/{package}'.format(system_anaconda_packages_root_path=full_anaconda_python_packages_path, package=package),
-                                '{condaenv_packages_root_path}/{package}'.format(condaenv_packages_root_path=full_condaenv_python_packages_path, package=package))
+                shutil.copytree(
+                    '{system_anaconda_packages_root_path}/{package}'.format(
+                        system_anaconda_packages_root_path=full_anaconda_python_packages_path, package=package
+                    ), '{condaenv_packages_root_path}/{package}'.format(
+                        condaenv_packages_root_path=full_condaenv_python_packages_path, package=package
+                    )
+                )
 
         def fix_application_path_prefix():
             app_name = os.path.splitext(os.path.basename(app_path))[0]
             target_application_path_prefix = '/Applications/{app_name}.app'.format(app_name=app_name)
             current_application_path_prefix = os.path.abspath('{env_path}/../../..'.format(env_path=env_path))
-            matching_files = subprocess.check_output(['grep', '-rl', "--exclude='*.pyc'", current_application_path_prefix, env_path]).strip().split('\n')
+            matching_files = subprocess.check_output(
+                ['grep', '-rl', "--exclude='*.pyc'", current_application_path_prefix, env_path]
+            ).strip().split('\n')
             text_files = []
             binary_files = []
             for matching_file in matching_files:
@@ -318,8 +370,9 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 else:
                     text_files.append(matching_file)
             for text_file in text_files:
-                sed_pattern = 's!{current_prefix}!{target_prefix}!g'.format(current_prefix=current_application_path_prefix,
-                                                                            target_prefix=target_application_path_prefix)
+                sed_pattern = 's!{current_prefix}!{target_prefix}!g'.format(
+                    current_prefix=current_application_path_prefix, target_prefix=target_application_path_prefix
+                )
                 subprocess.check_call(['sed', '-i', '', sed_pattern, text_file])
             for binary_file in binary_files:
                 binary_replace(binary_file, current_application_path_prefix, target_application_path_prefix)
@@ -337,18 +390,19 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             library_directory = '{env_path}/lib'.format(env_path=env_path)
             site_package_directory = '{env_path}/lib/python2.7/site-packages'.format(env_path=env_path)
             for rel_lib_path in ('gr/libGR.so', 'gr3/libGR3.so'):
-                os.symlink(os.path.relpath('{site_packages}/{lib}'.format(site_packages=site_package_directory,
-                                                                          lib=rel_lib_path),
-                                           library_directory),
-                           '{lib}/{name}'.format(lib=library_directory, name=os.path.basename(rel_lib_path)))
+                os.symlink(
+                    os.path.relpath(
+                        '{site_packages}/{lib}'.format(site_packages=site_package_directory, lib=rel_lib_path),
+                        library_directory
+                    ), '{lib}/{name}'.format(lib=library_directory, name=os.path.basename(rel_lib_path))
+                )
 
         create_missing_library_links()
 
     def precompile_python_files():
         with open(os.devnull, 'w') as dummy:
             try:
-                subprocess.check_call(['python', '-m', 'compileall', macos_path],
-                                      stdout=dummy, stderr=dummy)
+                subprocess.check_call(['python', '-m', 'compileall', macos_path], stdout=dummy, stderr=dummy)
             except subprocess.CalledProcessError:
                 raise PrecompileError('Python modules could not be precompiled.')
 
@@ -356,8 +410,9 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         def get_makefile_path():
             if executable_root_path is not None and \
                _extension_makefile.startswith(os.path.abspath(executable_root_path)):
-                makefile_path = '{macos_path}/{rel_makefile_path}'.format(macos_path=macos_path,
-                                                                          rel_makefile_path=os.path.relpath(_extension_makefile, executable_root_path))
+                makefile_path = '{macos_path}/{rel_makefile_path}'.format(
+                    macos_path=macos_path, rel_makefile_path=os.path.relpath(_extension_makefile, executable_root_path)
+                )
             else:
                 makefile_path = _extension_makefile
             return makefile_path
@@ -368,10 +423,14 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         makefile_dir_path = os.path.dirname(makefile_path)
         with open(os.devnull, 'w') as dummy:
             try:
-                subprocess.check_call(['make', '-C', makefile_dir_path,
-                                       _EXT_MAKEFILE_TARGET,
-                                       '{var}={lib_dir_path}'.format(var=_EXT_PYLIB_VARIABLE, lib_dir_path=lib_dir_path)],
-                                      stdout=dummy, stderr=dummy)
+                subprocess.check_call(
+                    [
+                        'make', '-C', makefile_dir_path, _EXT_MAKEFILE_TARGET,
+                        '{var}={lib_dir_path}'.format(var=_EXT_PYLIB_VARIABLE, lib_dir_path=lib_dir_path)
+                    ],
+                    stdout=dummy,
+                    stderr=dummy
+                )
             except subprocess.CalledProcessError:
                 raise ExtensionModuleError('Extension modules could not be built.')
 
@@ -390,8 +449,10 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
         with open('{macos}/{startup}'.format(macos=macos_path, startup=_ENV_STARTUP_SCRIPT_NAME), 'w') as f:
             f.writelines(env_startup_script.encode('utf-8'))
-        shutil.copy('{base_dir}/util/binary_replace.py'.format(base_dir=os.path.dirname(__file__)),
-                    '{resources}/binary_replace.py'.format(resources=resources_path))
+        shutil.copy(
+            '{base_dir}/util/binary_replace.py'.format(base_dir=os.path.dirname(__file__)),
+            '{resources}/binary_replace.py'.format(resources=resources_path)
+        )
         new_executable_path = _ENV_STARTUP_SCRIPT_NAME
     else:
         new_executable_path = _PY_STARTUP_SCRIPT_NAME
