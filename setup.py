@@ -15,9 +15,13 @@ def get_long_description_from_readme(readme_filename='README.md'):
     rst_filename = '{}.rst'.format(os.path.splitext(os.path.basename(readme_filename))[0])
     if not os.path.isfile(rst_filename):
         subprocess.check_call(['pandoc', readme_filename, '-t', 'rst', '-o', rst_filename])
+        created_tmp_rst = True
+    else:
+        created_tmp_rst = False
     with open(rst_filename) as readme_file:
         long_description = readme_file.read()
-    os.remove(rst_filename)
+    if created_tmp_rst:
+        os.remove(rst_filename)
     return long_description
 
 
@@ -42,7 +46,7 @@ setup(
     long_description=long_description,
     license='MIT',
     url='https://github.com/IngoHeimbach/shallow-appify',
-    keywords='macOS app py2app',
+    keywords=['macOS', 'app', 'py2app'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',
