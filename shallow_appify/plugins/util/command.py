@@ -7,7 +7,6 @@ from __future__ import absolute_import
 
 import subprocess
 
-
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
 
@@ -15,7 +14,7 @@ __email__ = 'i.heimbach@fz-juelich.de'
 def exec_cmd(*cmd):
     cmd = ' '.join(cmd)
     p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
+    stdout, _ = p.communicate()
     return stdout
 
 

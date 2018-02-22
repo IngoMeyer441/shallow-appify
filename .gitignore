@@ -7,3 +7,6 @@
 *.so
 *.swp
 *.swo
+__pycache__/
+/dist/
+/*.egg-info/

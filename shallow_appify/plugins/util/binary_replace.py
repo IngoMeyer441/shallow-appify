@@ -6,9 +6,18 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-
 import re
 import sys
+
+__author__ = 'Ingo Heimbach'
+__email__ = 'i.heimbach@fz-juelich.de'
+
+
+PY2 = (sys.version_info.major < 3)
+if PY2:
+    Text = unicode
+else:
+    Text = str
 
 
 def binary_replace(file_path, old, new):
@@ -22,9 +31,9 @@ def binary_replace(file_path, old, new):
             padding = len(old_text) - len(new_text)
         return new_text + b'\0' * padding
 
-    if isinstance(old, unicode):
+    if isinstance(old, Text):
         old = old.encode('utf-8')
-    if isinstance(new, unicode):
+    if isinstance(new, Text):
         new = new.encode('utf-8')
     with open(file_path, 'rb') as f:
         data = f.read()
@@ -32,7 +41,7 @@ def binary_replace(file_path, old, new):
     fill_len = max(0, len(new) - len(old))
     pattern = re.compile(re.escape(old) + b'([^\0]*?)\0' + ('.{%d}' % fill_len))
     data = pattern.sub(replace, data)
-    assert(unpatched_data_len == len(data))
+    assert (unpatched_data_len == len(data))
     with open(file_path, 'wb') as f:
         f.write(data)
 

@@ -7,9 +7,9 @@ from __future__ import division
 from __future__ import absolute_import
 
 import argparse
+import logging
 import os
 import os.path
-import plugins
 import re
 import shutil
 import subprocess
@@ -17,16 +17,11 @@ import sys
 import tempfile
 from jinja2 import Template
 from PIL import Image
-import logging
+from . import plugins
 logging.basicConfig(level=logging.WARNING)
-
 
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
-
-__version_info__ = (0, 2, 1)
-__version__ = '.'.join(map(str, __version_info__))
-
 
 INFO_PLIST_TEMPLATE = '''
 <?xml version="1.0" encoding="UTF-8"?>
@@ -86,7 +81,7 @@ class TemporaryDirectory(object):
     def __enter__(self):
         return self.tmp_dir
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, typ, value, traceback):
         shutil.rmtree(self.tmp_dir)
         self.tmp_dir = None
 
@@ -94,7 +89,7 @@ class TemporaryDirectory(object):
 class Arguments(object):
     def __init__(self, **kwargs):
         super(Arguments, self).__setattr__('_members', {})
-        for key, value in kwargs.iteritems():
+        for key, value in kwargs.items():
             self._members[key] = value
 
     def __getattr__(self, attr):
@@ -124,28 +119,68 @@ class InvalidAppPath(Exception):
 
 def parse_args():
     def parse_commandline():
-        parser = argparse.ArgumentParser(description='''
+        parser = argparse.ArgumentParser(
+            description='''
         Creates a runnable application for Mac OS X with references to
-        system libraries. The result is a NON-self-contained app bundle.''')
-        parser.add_argument('-d', '--executable-directory', dest='executable_root_path', action='store',
-                            type=os.path.abspath,
-                            help='Defines the executable root directory that will be included in the app.')
-        parser.add_argument('-e', '--environment', dest='environment_vars', action='store', nargs='+',
-                            help='Specifies which environment variables -- set on the current interpreter startup -- '
-                                 ' shall be included in the app bundle.')
-        parser.add_argument('-i', '--icon', dest='icon_path', action='store', type=os.path.abspath,
-                            help='Image file that is used for app icon creation. It must be quadratic with a '
-                                 'resolution of 1024x1024 pixels or more.')
-        parser.add_argument('-g', '--group', dest='group', action='store',
-                            help='Developer group name that is saved to the internal app plist.')
-        parser.add_argument('-n', '--hidden', dest='hidden', action='store',
-                            help='Hides the app icon in the dock when given.')
-        parser.add_argument('-o', '--output', dest='app_path', action='store', type=os.path.abspath,
-                            help='Sets the path the app will be saved to.')
-        parser.add_argument('-v', '--version', dest='version_string', action='store',
-                            help='Specifies the version string of the program.')
-        parser.add_argument('executable_path', action='store', type=os.path.abspath,
-                            help='Sets the executable that is started when the app is opened.')
+        system libraries. The result is a NON-self-contained app bundle.'''
+        )
+        parser.add_argument(
+            '-d',
+            '--executable-directory',
+            dest='executable_root_path',
+            action='store',
+            type=os.path.abspath,
+            help='Defines the executable root directory that will be included in the app.'
+        )
+        parser.add_argument(
+            '-e',
+            '--environment',
+            dest='environment_vars',
+            action='store',
+            nargs='+',
+            help='Specifies which environment variables -- set on the current interpreter startup -- '
+            ' shall be included in the app bundle.'
+        )
+        parser.add_argument(
+            '-i',
+            '--icon',
+            dest='icon_path',
+            action='store',
+            type=os.path.abspath,
+            help='Image file that is used for app icon creation. It must be quadratic with a '
+            'resolution of 1024x1024 pixels or more.'
+        )
+        parser.add_argument(
+            '-g',
+            '--group',
+            dest='group',
+            action='store',
+            help='Developer group name that is saved to the internal app plist.'
+        )
+        parser.add_argument(
+            '-n', '--hidden', dest='hidden', action='store', help='Hides the app icon in the dock when given.'
+        )
+        parser.add_argument(
+            '-o',
+            '--output',
+            dest='app_path',
+            action='store',
+            type=os.path.abspath,
+            help='Sets the path the app will be saved to.'
+        )
+        parser.add_argument(
+            '-v',
+            '--version',
+            dest='version_string',
+            action='store',
+            help='Specifies the version string of the program.'
+        )
+        parser.add_argument(
+            'executable_path',
+            action='store',
+            type=os.path.abspath,
+            help='Sets the executable that is started when the app is opened.'
+        )
         plugins.add_plugin_command_line_arguments(parser)
         if len(sys.argv) < 2:
             parser.print_help()
@@ -187,13 +222,21 @@ def parse_args():
     return Arguments(**args)
 
 
-def create_info_plist_content(app_name, version, group, executable_path, executable_root_path=None, icon_path=None,
-                              hidden=False, environment_vars=None):
+def create_info_plist_content(
+    app_name,
+    version,
+    group,
+    executable_path,
+    executable_root_path=None,
+    icon_path=None,
+    hidden=False,
+    environment_vars=None
+):
     def get_short_version(version):
-        match_obj = re.search('\d+(\.\d+){0,2}', version)
+        match_obj = re.search(r'\d+(\.\d+){0,2}', version)
         if match_obj is not None:
             short_version = match_obj.group()
-            while not re.match('\d+\.\d+\.\d+', short_version):
+            while not re.match(r'\d+\.\d+\.\d+', short_version):
                 short_version += '.0'
         else:
             short_version = '0.0.0'
@@ -207,20 +250,22 @@ def create_info_plist_content(app_name, version, group, executable_path, executa
     else:
         executable = executable_path
 
-    vars = {'executable': executable,
-            'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
-            'name': app_name,
-            'group': group,
-            'hidden': hidden,
-            'short_version': get_short_version(version),
-            'version': version}
+    variables = {
+        'executable': executable,
+        'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
+        'name': app_name,
+        'group': group,
+        'hidden': hidden,
+        'short_version': get_short_version(version),
+        'version': version
+    }
 
     if environment_vars is not None:
         environment_variables = dict(((key, os.environ[key]) for key in environment_vars))
-        vars['environment'] = environment_variables
+        variables['environment'] = environment_variables
 
     template = Template(INFO_PLIST_TEMPLATE)
-    info_plist = template.render(**vars)
+    info_plist = template.render(**variables)
 
     return info_plist
 
@@ -230,28 +275,40 @@ def create_icon_set(icon_path, iconset_out_path):
         tmp_icns_dir = '{tmp_dir}/icon.iconset'.format(tmp_dir=tmp_dir)
         os.mkdir(tmp_icns_dir)
         original_icon = Image.open(icon_path)
-        for name, size in (('icon_{size}x{size}{suffix}.png'.format(size=size, suffix=suffix), factor*size)
-                           for size in (16, 32, 128, 256, 512)
-                           for factor, suffix in ((1, ''), (2, '@2x'))):
+        for name, size in (
+            ('icon_{size}x{size}{suffix}.png'.format(size=size, suffix=suffix), factor * size)
+            for size in (16, 32, 128, 256, 512) for factor, suffix in ((1, ''), (2, '@2x'))
+        ):
             resized_icon = original_icon.resize((size, size), Image.ANTIALIAS)
             resized_icon.save('{icns_dir}/{icon_name}'.format(icns_dir=tmp_icns_dir, icon_name=name))
         subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
 
-def create_app(app_path, version_string, group, executable_path, executable_root_path=None, icon_path=None,
-               hidden=False, environment_vars=None, **kwargs):
+def create_app(
+    app_path,
+    version_string,
+    group,
+    executable_path,
+    executable_root_path=None,
+    icon_path=None,
+    hidden=False,
+    environment_vars=None,
+    **kwargs
+):
     def abs_path(relative_bundle_path, base=None):
         return os.path.abspath('{app_path}/{dir}'.format(app_path=base or app_path, dir=relative_bundle_path))
 
     def error_checks():
         if os.path.exists(abs_path('.')):
             raise AppAlreadyExistingError('The app path {app_path} already exists.'.format(app_path=app_path))
-        if executable_root_path is not None and abs_path('.').startswith(os.path.abspath(executable_root_path)+'/'):
+        if executable_root_path is not None and abs_path('.').startswith(os.path.abspath(executable_root_path) + '/'):
             raise InvalidAppPath('The specified app path is a subpath of the source root directory.')
 
     def write_info_plist():
-        info_plist_content = create_info_plist_content(app_name, version_string, group, app_executable_path,
-                                                       executable_root_path, bundle_icon_path, hidden, environment_vars)
+        info_plist_content = create_info_plist_content(
+            app_name, version_string, group, app_executable_path, executable_root_path, bundle_icon_path, hidden,
+            environment_vars
+        )
         with open(abs_path('Info.plist', contents_path), 'w') as f:
             f.writelines(info_plist_content.encode('utf-8'))
 
@@ -267,7 +324,7 @@ def create_app(app_path, version_string, group, executable_path, executable_root
             shutil.copytree(executable_root_path, macos_path)
 
     def set_file_permissions():
-        os.chmod(abs_path(app_executable_path, macos_path), 0555)
+        os.chmod(abs_path(app_executable_path, macos_path), 0o555)
 
     directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
     contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)
@@ -288,8 +345,10 @@ def create_app(app_path, version_string, group, executable_path, executable_root
             create_icon_set(icon_path, bundle_icon_path)
         except IOError as e:
             raise MissingIconError(e)
-    setup_result = plugins.setup_startup(os.path.splitext(executable_path)[1], app_path, executable_path,
-                                         app_executable_path, executable_root_path, macos_path, resources_path)
+    setup_result = plugins.setup_startup(
+        os.path.splitext(executable_path)[1], app_path, executable_path, app_executable_path, executable_root_path,
+        macos_path, resources_path
+    )
     if setup_result is not NotImplemented:
         app_executable_path = setup_result
     write_info_plist()
@@ -303,7 +362,7 @@ def main():
         plugins.pre_create_app(os.path.splitext(args.executable_path)[1], **args)
         create_app(**args)
         plugins.post_create_app(os.path.splitext(args.executable_path)[1], **args)
-    except Exception as e:
+    except BaseException as e:
         sys.stderr.write('Error: {message}\n'.format(message=e))
 
 
