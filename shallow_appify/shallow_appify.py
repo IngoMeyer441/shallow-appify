@@ -82,7 +82,7 @@ class TemporaryDirectory(object):
     def __enter__(self):
         return self.tmp_dir
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, typ, value, traceback):
         shutil.rmtree(self.tmp_dir)
         self.tmp_dir = None
 
@@ -90,7 +90,7 @@ class TemporaryDirectory(object):
 class Arguments(object):
     def __init__(self, **kwargs):
         super(Arguments, self).__setattr__('_members', {})
-        for key, value in kwargs.iteritems():
+        for key, value in kwargs.items():
             self._members[key] = value
 
     def __getattr__(self, attr):
@@ -186,10 +186,10 @@ def parse_args():
 def create_info_plist_content(app_name, version, group, executable_path, executable_root_path=None, icon_path=None,
                               hidden=False, environment_vars=None):
     def get_short_version(version):
-        match_obj = re.search('\d+(\.\d+){0,2}', version)
+        match_obj = re.search(r'\d+(\.\d+){0,2}', version)
         if match_obj is not None:
             short_version = match_obj.group()
-            while not re.match('\d+\.\d+\.\d+', short_version):
+            while not re.match(r'\d+\.\d+\.\d+', short_version):
                 short_version += '.0'
         else:
             short_version = '0.0.0'
@@ -203,20 +203,22 @@ def create_info_plist_content(app_name, version, group, executable_path, executa
     else:
         executable = executable_path
 
-    vars = {'executable': executable,
-            'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
-            'name': app_name,
-            'group': group,
-            'hidden': hidden,
-            'short_version': get_short_version(version),
-            'version': version}
+    variables = {
+        'executable': executable,
+        'icon_file': os.path.basename(icon_path) if icon_path is not None else None,
+        'name': app_name,
+        'group': group,
+        'hidden': hidden,
+        'short_version': get_short_version(version),
+        'version': version
+    }
 
     if environment_vars is not None:
         environment_variables = dict(((key, os.environ[key]) for key in environment_vars))
-        vars['environment'] = environment_variables
+        variables['environment'] = environment_variables
 
     template = Template(INFO_PLIST_TEMPLATE)
-    info_plist = template.render(**vars)
+    info_plist = template.render(**variables)
 
     return info_plist
 
@@ -263,7 +265,7 @@ def create_app(app_path, version_string, group, executable_path, executable_root
             shutil.copytree(executable_root_path, macos_path)
 
     def set_file_permissions():
-        os.chmod(abs_path(app_executable_path, macos_path), 0555)
+        os.chmod(abs_path(app_executable_path, macos_path), 0o555)
 
     directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
     contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)

@@ -10,6 +10,12 @@ from __future__ import unicode_literals
 import re
 import sys
 
+PY2 = (sys.version_info.major < 3)  # is needed for correct mypy checking
+if PY2:
+    Text = unicode
+else:
+    Text = str
+
 
 def binary_replace(file_path, old, new):
     def replace(match):
@@ -22,9 +28,9 @@ def binary_replace(file_path, old, new):
             padding = len(old_text) - len(new_text)
         return new_text + b'\0' * padding
 
-    if isinstance(old, unicode):
+    if isinstance(old, Text):
         old = old.encode('utf-8')
-    if isinstance(new, unicode):
+    if isinstance(new, Text):
         new = new.encode('utf-8')
     with open(file_path, 'rb') as f:
         data = f.read()
