@@ -12,7 +12,6 @@ import sys
 __author__ = 'Ingo Heimbach'
 __email__ = 'i.heimbach@fz-juelich.de'
 
-
 PY2 = (sys.version_info.major < 3)
 if PY2:
     Text = unicode

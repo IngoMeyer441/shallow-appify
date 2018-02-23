@@ -273,7 +273,7 @@ def create_info_plist_content(
 
 def create_icon_set(icon_path, iconset_out_path):
     with TemporaryDirectory() as tmp_dir:
-        tmp_icns_dir = '{tmp_dir}/icon.iconset'.format(tmp_dir=tmp_dir)
+        tmp_icns_dir = os.path.join(tmp_dir, 'icon.iconset')
         os.mkdir(tmp_icns_dir)
         original_icon = Image.open(icon_path)
         for name, size in (
@@ -281,8 +281,8 @@ def create_icon_set(icon_path, iconset_out_path):
             for size in (16, 32, 128, 256, 512) for factor, suffix in ((1, ''), (2, '@2x'))
         ):
             resized_icon = original_icon.resize((size, size), Image.ANTIALIAS)
-            resized_icon.save('{icns_dir}/{icon_name}'.format(icns_dir=tmp_icns_dir, icon_name=name))
-        subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
+            resized_icon.save(os.path.join(icns_dir, icon_name))
+        subprocess.check_call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
 
 def create_app(
@@ -297,7 +297,7 @@ def create_app(
     **kwargs
 ):
     def abs_path(relative_bundle_path, base=None):
-        return os.path.abspath('{app_path}/{dir}'.format(app_path=base or app_path, dir=relative_bundle_path))
+        return os.path.abspath(os.path.join(base or app_path, relative_bundle_path))
 
     def error_checks():
         if os.path.exists(abs_path('.')):
