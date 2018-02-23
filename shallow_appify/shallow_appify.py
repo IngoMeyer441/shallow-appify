@@ -121,6 +121,10 @@ class AppAlreadyExistingError(Exception):
     pass
 
 
+class DmgAlreadyExistingError(Exception):
+    pass
+
+
 class InvalidAppPath(Exception):
     pass
 
@@ -327,6 +331,8 @@ def create_app(
     def error_checks():
         if os.path.exists(abs_path('.')):
             raise AppAlreadyExistingError('The app path {app_path} already exists.'.format(app_path=app_path))
+        if dmg_requested and os.path.exists(dmg_path):
+            raise DmgAlreadyExistingError('The dmg path {dmg_path} already exists.'.format(dmg_path=dmg_path))
         if executable_root_path is not None and abs_path('.').startswith(os.path.abspath(executable_root_path) + '/'):
             raise InvalidAppPath('The specified app path is a subpath of the source root directory.')
 
