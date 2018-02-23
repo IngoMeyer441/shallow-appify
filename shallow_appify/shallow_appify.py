@@ -166,7 +166,7 @@ def parse_args():
             help='Developer group name that is saved to the internal app plist.'
         )
         parser.add_argument(
-            '-n', '--hidden', dest='hidden', action='store', help='Hides the app icon in the dock when given.'
+            '-n', '--hidden', dest='hidden', action='store_true', help='Hides the app icon in the dock when given.'
         )
         parser.add_argument(
             '-o',
@@ -211,6 +211,8 @@ def parse_args():
     checked_args = {}
     checked_args['executable_root_path'] = args.executable_root_path
     checked_args['icon_path'] = args.icon_path
+    checked_args['group'] = args.group if args.group else 'undefined'
+    checked_args['hidden'] = args.hidden
     checked_args['environment_vars'] = map_environment_arguments_to_dict(args.environment_vars)
     if args.app_path is not None:
         checked_args['app_path'] = args.app_path
