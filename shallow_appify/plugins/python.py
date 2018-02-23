@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
+import codecs
 import fnmatch
 import itertools
 import os
@@ -176,7 +177,7 @@ def parse_command_line_arguments(args):
     global _create_conda_env, _requirements_file, _conda_channels, _extension_makefile, _conda_gr_included
 
     def is_gr_in_conda_requirements(requirements_file):
-        with open(requirements_file, 'r') as f:
+        with codecs.open(requirements_file, 'r', 'utf-8') as f:
             found_gr = any((line.startswith('gr=') for line in f))
         return found_gr
 
@@ -218,7 +219,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             rel_python_lib_path = '@executable_path/{rel_path}'.format(
                 rel_path=os.path.relpath(python_lib_path, python_dir_path)
             )
-            with open(os.devnull, 'w') as dummy:
+            with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
                 try:
                     subprocess.check_call(
                         ['install_name_tool', '-id', rel_python_lib_path, python_lib_path], stdout=dummy, stderr=dummy
@@ -229,7 +230,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
     def create_conda_env():
         def create_env():
             conda_channels = _conda_channels or []
-            with open(os.devnull, 'w') as dummy:
+            with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
                 env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
                 try:
                     subprocess.check_call(
@@ -296,7 +297,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             found_line_to_replace = False
             skip_line_num = 0
             new_lines = []
-            with open(full_conda_activate_path, 'r') as f:
+            with codecs.open(full_conda_activate_path, 'r', 'utf-8') as f:
                 for line in f:
                     if skip_line_num > 0:
                         skip_line_num -= 1
@@ -312,16 +313,16 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                             new_lines.append('{}\n'.format(REPLACE_LINE_INSERT))
                             continue
                     new_lines.append(line)
-            with open(full_conda_activate_path, 'w') as f:
+            with codecs.open(full_conda_activate_path, 'w', 'utf-8') as f:
                 f.writelines(new_lines)
 
         def fix_conda_shebang():
             full_conda_bin_path = '{env_path}/{conda_bin_path}'.format(env_path=env_path, conda_bin_path=CONDA_BIN_PATH)
-            with open(full_conda_bin_path, 'r') as f:
+            with codecs.open(full_conda_bin_path, 'r', 'utf-8') as f:
                 lines = f.readlines()
             # replace shebang line
             lines[0] = '#!/usr/bin/env python\n'
-            with open(full_conda_bin_path, 'w') as f:
+            with codecs.open(full_conda_bin_path, 'w', 'utf-8') as f:
                 f.writelines(lines)
 
         def copy_missing_conda_packages():
@@ -332,7 +333,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 anaconda_dir_path = None
                 system_conda_bin_path = command.which('conda')
                 if system_conda_bin_path:
-                    with open(system_conda_bin_path, 'r') as f:
+                    with codecs.open(system_conda_bin_path, 'r', 'utf-8') as f:
                         shebang_line = f.readline()
                     match_obj = re.match('#!(.*)/bin/python', shebang_line)
                     if match_obj:
@@ -376,7 +377,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 subprocess.check_call(['sed', '-i', '', sed_pattern, text_file])
             for binary_file in binary_files:
                 binary_replace(binary_file, current_application_path_prefix, target_application_path_prefix)
-            with open('{env_path}/../application_path_prefix'.format(env_path=env_path), 'w') as f:
+            with codecs.open(os.path.join(env_path, '../application_path_prefix'), 'w', 'utf-8') as f:
                 f.write(target_application_path_prefix)
 
         fix_links_to_system_files()
@@ -400,7 +401,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         create_missing_library_links()
 
     def precompile_python_files():
-        with open(os.devnull, 'w') as dummy:
+        with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
             try:
                 subprocess.check_call(['python', '-m', 'compileall', macos_path], stdout=dummy, stderr=dummy)
             except subprocess.CalledProcessError:
@@ -421,7 +422,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
         makefile_path = get_makefile_path()
         makefile_dir_path = os.path.dirname(makefile_path)
-        with open(os.devnull, 'w') as dummy:
+        with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
             try:
                 subprocess.check_call(
                     [
@@ -436,8 +437,8 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
 
     main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
     python_startup_script = create_python_startup_script(main_module)
-    with open('{macos}/{startup}'.format(macos=macos_path, startup=_PY_STARTUP_SCRIPT_NAME), 'w') as f:
-        f.writelines(python_startup_script.encode('utf-8'))
+    with codecs.open(os.path.join(macos_path, _PY_STARTUP_SCRIPT_NAME), 'w', 'utf-8') as f:
+        f.write(python_startup_script)
     if _create_conda_env:
         env_path = create_conda_env()
         make_conda_portable(env_path)
@@ -447,8 +448,9 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         if _extension_makefile is not None:
             build_extension_modules(env_path)
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
-        with open('{macos}/{startup}'.format(macos=macos_path, startup=_ENV_STARTUP_SCRIPT_NAME), 'w') as f:
-            f.writelines(env_startup_script.encode('utf-8'))
+        with codecs.open(os.path.join(macos_path, _ENV_STARTUP_SCRIPT_NAME), 'w',
+                         'utf-8') as f:
+            f.write(env_startup_script)
         shutil.copy(
             '{base_dir}/util/binary_replace.py'.format(base_dir=os.path.dirname(__file__)),
             '{resources}/binary_replace.py'.format(resources=resources_path)

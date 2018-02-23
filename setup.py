@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import codecs
 import os
 import subprocess
 from setuptools import setup, find_packages
@@ -18,7 +19,7 @@ def get_long_description_from_readme(readme_filename='README.md'):
         created_tmp_rst = True
     else:
         created_tmp_rst = False
-    with open(rst_filename) as readme_file:
+    with codecs.open(rst_filename, 'r', 'utf-8') as readme_file:
         long_description = readme_file.read()
     if created_tmp_rst:
         os.remove(rst_filename)

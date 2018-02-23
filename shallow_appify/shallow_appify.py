@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 
 import argparse
+import codecs
 import logging
 import os
 import os.path
@@ -309,11 +310,11 @@ def create_app(
             app_name, version_string, group, app_executable_path, executable_root_path, bundle_icon_path, hidden,
             environment_vars
         )
-        with open(abs_path('Info.plist', contents_path), 'w') as f:
-            f.writelines(info_plist_content.encode('utf-8'))
+        with codecs.open(abs_path('Info.plist', contents_path), 'w', 'utf-8') as f:
+            f.write(info_plist_content)
 
     def write_pkg_info():
-        with open(abs_path('PkgInfo', contents_path), 'w') as f:
+        with codecs.open(abs_path('PkgInfo', contents_path), 'w', 'utf-8') as f:
             f.write(PKG_INFO_CONTENT)
 
     def copy_source():
