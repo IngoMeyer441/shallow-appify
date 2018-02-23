@@ -32,6 +32,9 @@ setup(
     name='shallow-appify',
     version=__version__,
     packages=find_packages(),
+    package_data={
+        str('shallow_appify'): ['dmg_background.png']  # setuptools needs byte strings as keys when running Python 2.x
+    },
     install_requires=[
         'Jinja2',
         'Pillow'

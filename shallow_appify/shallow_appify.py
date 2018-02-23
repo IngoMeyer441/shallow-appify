@@ -77,14 +77,21 @@ PKG_INFO_CONTENT = 'APPL????'
 
 class TemporaryDirectory(object):
     def __init__(self):
-        self.tmp_dir = tempfile.mkdtemp()
+        self._path = tempfile.mkdtemp()
+
+    def close(self):
+        shutil.rmtree(self._path)
+        self._path = None
 
     def __enter__(self):
-        return self.tmp_dir
+        return self._path
 
     def __exit__(self, typ, value, traceback):
-        shutil.rmtree(self.tmp_dir)
-        self.tmp_dir = None
+        self.close()
+
+    @property
+    def path(self):
+        return self._path
 
 
 class Arguments(object):
@@ -285,6 +292,22 @@ def create_icon_set(icon_path, iconset_out_path):
         subprocess.check_call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
 
+def create_dmg(app_name, app_path, dmg_path):
+    app_filename = os.path.basename(app_path)
+    app_dirpath = os.path.dirname(app_path)
+    create_dmg_url = 'https://github.com/andreyvit/create-dmg.git'
+    with TemporaryDirectory() as tmp_dir:
+        subprocess.check_call(('git', 'clone', '--depth=1', create_dmg_url), cwd=tmp_dir)
+        subprocess.check_call(
+            (
+                './create-dmg', '--volname', app_name, '--window-size', '800', '400', '--background',
+                os.path.join(os.path.dirname(__file__), 'dmg_background.png'), '--icon', app_filename, '200', '200',
+                '--hide-extension', app_filename, '--app-drop-link', '600', '200', dmg_path, app_dirpath
+            ),
+            cwd=os.path.join(tmp_dir, 'create-dmg')
+        )
+
+
 def create_app(
     app_path,
     version_string,
@@ -328,9 +351,16 @@ def create_app(
         os.chmod(abs_path(app_executable_path, macos_path), 0o555)
 
     directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
+    app_name = os.path.splitext(os.path.basename(app_path))[0]
+    dmg_requested = (os.path.splitext(app_path)[1] == '.dmg')
+    tmp_dir_wrapper = None
+    dmg_path = None
+    if dmg_requested:
+        tmp_dir_wrapper = TemporaryDirectory()
+        dmg_path = app_path
+        app_path = os.path.join(tmp_dir_wrapper.path, app_name + '.app')
     contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)
     bundle_icon_path = abs_path('Icon.icns', resources_path) if icon_path is not None else None
-    app_name = os.path.splitext(os.path.basename(app_path))[0]
     if executable_root_path is not None:
         app_executable_path = os.path.relpath(executable_path, executable_root_path)
     else:
@@ -355,6 +385,9 @@ def create_app(
     write_info_plist()
     write_pkg_info()
     set_file_permissions()
+    if dmg_requested:
+        create_dmg(app_name, app_path, dmg_path)
+        tmp_dir_wrapper.close()
 
 
 def main():
