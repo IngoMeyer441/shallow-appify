@@ -1,21 +1,20 @@
-shallow-appify
-==============
+# shallow-appify
+
+## Introduction
 
 Converts any executable to a non-self-contained mac app bundle which depends on system libraries. Other converters often
 have problems when complex dependencies (e.g. PyQt) must be included. shallow-appify avoids these problems by
 referencing present system libraries.
 
+## Usage
 
-Usage
-=====
-
-    usage: shallow-appify.py [-h] [-d EXECUTABLE_ROOT_PATH]
-                             [-e ENVIRONMENT_VARS [ENVIRONMENT_VARS ...]]
-                             [-i ICON_PATH] [-g GROUP] [-n HIDDEN] [-o APP_PATH]
-                             [-v VERSION_STRING] [--conda CONDA_REQ_FILE]
-                             [--conda-channels CONDA_CHANNELS [CONDA_CHANNELS ...]]
-                             [--extension-makefile EXTENSION_MAKEFILE]
-                             executable_path
+    usage: shallow-appify [-h] [-d EXECUTABLE_ROOT_PATH]
+                          [-e ENVIRONMENT_VARS [ENVIRONMENT_VARS ...]] [-i ICON_PATH]
+                          [-g GROUP] [-n] [-o APP_PATH] [-v VERSION_STRING]
+                          [--conda CONDA_REQ_FILE]
+                          [--conda-channels CONDA_CHANNELS [CONDA_CHANNELS ...]]
+                          [--extension-makefile EXTENSION_MAKEFILE]
+                          executable_path
 
     Creates a runnable application for Mac OS X with references to system
     libraries. The result is a NON-self-contained app bundle.
@@ -40,8 +39,7 @@ Usage
       -g GROUP, --group GROUP
                             Developer group name that is saved to the internal app
                             plist.
-      -n HIDDEN, --hidden HIDDEN
-                            Hides the app icon in the dock when given.
+      -n, --hidden          Hides the app icon in the dock when given.
       -o APP_PATH, --output APP_PATH
                             Sets the path the app will be saved to.
       -v VERSION_STRING, --version VERSION_STRING
