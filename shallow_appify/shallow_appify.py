@@ -290,7 +290,7 @@ def create_icon_set(icon_path, iconset_out_path):
             for size in (16, 32, 128, 256, 512) for factor, suffix in ((1, ''), (2, '@2x'))
         ):
             resized_icon = original_icon.resize((size, size), Image.ANTIALIAS)
-            resized_icon.save(os.path.join(icns_dir, icon_name))
+            resized_icon.save(os.path.join(tmp_icns_dir, name))
         subprocess.check_call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
 
 
@@ -394,12 +394,9 @@ def create_app(
 
 def main():
     args = parse_args()
-    try:
-        plugins.pre_create_app(os.path.splitext(args.executable_path)[1], **args)
-        create_app(**args)
-        plugins.post_create_app(os.path.splitext(args.executable_path)[1], **args)
-    except BaseException as e:
-        sys.stderr.write('Error: {message}\n'.format(message=e))
+    plugins.pre_create_app(os.path.splitext(args.executable_path)[1], **args)
+    create_app(**args)
+    plugins.post_create_app(os.path.splitext(args.executable_path)[1], **args)
 
 
 if __name__ == '__main__':
