@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import codecs
 import os
 import subprocess
 from setuptools import setup, find_packages
@@ -15,9 +16,13 @@ def get_long_description_from_readme(readme_filename='README.md'):
     rst_filename = '{}.rst'.format(os.path.splitext(os.path.basename(readme_filename))[0])
     if not os.path.isfile(rst_filename):
         subprocess.check_call(['pandoc', readme_filename, '-t', 'rst', '-o', rst_filename])
-    with open(rst_filename) as readme_file:
+        created_tmp_rst = True
+    else:
+        created_tmp_rst = False
+    with codecs.open(rst_filename, 'r', 'utf-8') as readme_file:
         long_description = readme_file.read()
-    os.remove(rst_filename)
+    if created_tmp_rst:
+        os.remove(rst_filename)
     return long_description
 
 
@@ -27,6 +32,9 @@ setup(
     name='shallow-appify',
     version=__version__,
     packages=find_packages(),
+    package_data={
+        str('shallow_appify'): ['dmg_background.png']  # setuptools needs byte strings as keys when running Python 2.x
+    },
     install_requires=[
         'Jinja2',
         'Pillow'
@@ -42,7 +50,7 @@ setup(
     long_description=long_description,
     license='MIT',
     url='https://github.com/IngoHeimbach/shallow-appify',
-    keywords='macOS app py2app',
+    keywords=['macOS', 'app', 'py2app'],
     classifiers=[
         'Development Status :: 4 - Beta',
         'Environment :: Console',

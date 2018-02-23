@@ -7,6 +7,7 @@ from __future__ import division
 from __future__ import absolute_import
 
 import argparse
+import codecs
 import logging
 import os
 import os.path
@@ -76,14 +77,21 @@ PKG_INFO_CONTENT = 'APPL????'
 
 class TemporaryDirectory(object):
     def __init__(self):
-        self.tmp_dir = tempfile.mkdtemp()
+        self._path = tempfile.mkdtemp()
+
+    def close(self):
+        shutil.rmtree(self._path)
+        self._path = None
 
     def __enter__(self):
-        return self.tmp_dir
+        return self._path
 
     def __exit__(self, typ, value, traceback):
-        shutil.rmtree(self.tmp_dir)
-        self.tmp_dir = None
+        self.close()
+
+    @property
+    def path(self):
+        return self._path
 
 
 class Arguments(object):
@@ -158,7 +166,7 @@ def parse_args():
             help='Developer group name that is saved to the internal app plist.'
         )
         parser.add_argument(
-            '-n', '--hidden', dest='hidden', action='store', help='Hides the app icon in the dock when given.'
+            '-n', '--hidden', dest='hidden', action='store_true', help='Hides the app icon in the dock when given.'
         )
         parser.add_argument(
             '-o',
@@ -203,6 +211,8 @@ def parse_args():
     checked_args = {}
     checked_args['executable_root_path'] = args.executable_root_path
     checked_args['icon_path'] = args.icon_path
+    checked_args['group'] = args.group if args.group else 'undefined'
+    checked_args['hidden'] = args.hidden
     checked_args['environment_vars'] = map_environment_arguments_to_dict(args.environment_vars)
     if args.app_path is not None:
         checked_args['app_path'] = args.app_path
@@ -272,7 +282,7 @@ def create_info_plist_content(
 
 def create_icon_set(icon_path, iconset_out_path):
     with TemporaryDirectory() as tmp_dir:
-        tmp_icns_dir = '{tmp_dir}/icon.iconset'.format(tmp_dir=tmp_dir)
+        tmp_icns_dir = os.path.join(tmp_dir, 'icon.iconset')
         os.mkdir(tmp_icns_dir)
         original_icon = Image.open(icon_path)
         for name, size in (
@@ -280,8 +290,24 @@ def create_icon_set(icon_path, iconset_out_path):
             for size in (16, 32, 128, 256, 512) for factor, suffix in ((1, ''), (2, '@2x'))
         ):
             resized_icon = original_icon.resize((size, size), Image.ANTIALIAS)
-            resized_icon.save('{icns_dir}/{icon_name}'.format(icns_dir=tmp_icns_dir, icon_name=name))
-        subprocess.call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
+            resized_icon.save(os.path.join(icns_dir, icon_name))
+        subprocess.check_call(('iconutil', '--convert', 'icns', tmp_icns_dir, '--output', iconset_out_path))
+
+
+def create_dmg(app_name, app_path, dmg_path):
+    app_filename = os.path.basename(app_path)
+    app_dirpath = os.path.dirname(app_path)
+    create_dmg_url = 'https://github.com/andreyvit/create-dmg.git'
+    with TemporaryDirectory() as tmp_dir:
+        subprocess.check_call(('git', 'clone', '--depth=1', create_dmg_url), cwd=tmp_dir)
+        subprocess.check_call(
+            (
+                './create-dmg', '--volname', app_name, '--window-size', '800', '400', '--background',
+                os.path.join(os.path.dirname(__file__), 'dmg_background.png'), '--icon', app_filename, '200', '200',
+                '--hide-extension', app_filename, '--app-drop-link', '600', '200', dmg_path, app_dirpath
+            ),
+            cwd=os.path.join(tmp_dir, 'create-dmg')
+        )
 
 
 def create_app(
@@ -296,7 +322,7 @@ def create_app(
     **kwargs
 ):
     def abs_path(relative_bundle_path, base=None):
-        return os.path.abspath('{app_path}/{dir}'.format(app_path=base or app_path, dir=relative_bundle_path))
+        return os.path.abspath(os.path.join(base or app_path, relative_bundle_path))
 
     def error_checks():
         if os.path.exists(abs_path('.')):
@@ -309,11 +335,11 @@ def create_app(
             app_name, version_string, group, app_executable_path, executable_root_path, bundle_icon_path, hidden,
             environment_vars
         )
-        with open(abs_path('Info.plist', contents_path), 'w') as f:
-            f.writelines(info_plist_content.encode('utf-8'))
+        with codecs.open(abs_path('Info.plist', contents_path), 'w', 'utf-8') as f:
+            f.write(info_plist_content)
 
     def write_pkg_info():
-        with open(abs_path('PkgInfo', contents_path), 'w') as f:
+        with codecs.open(abs_path('PkgInfo', contents_path), 'w', 'utf-8') as f:
             f.write(PKG_INFO_CONTENT)
 
     def copy_source():
@@ -327,9 +353,16 @@ def create_app(
         os.chmod(abs_path(app_executable_path, macos_path), 0o555)
 
     directory_structure = ('Contents', 'Contents/MacOS', 'Contents/Resources')
+    app_name = os.path.splitext(os.path.basename(app_path))[0]
+    dmg_requested = (os.path.splitext(app_path)[1] == '.dmg')
+    tmp_dir_wrapper = None
+    dmg_path = None
+    if dmg_requested:
+        tmp_dir_wrapper = TemporaryDirectory()
+        dmg_path = app_path
+        app_path = os.path.join(tmp_dir_wrapper.path, app_name + '.app')
     contents_path, macos_path, resources_path = (abs_path(dir) for dir in directory_structure)
     bundle_icon_path = abs_path('Icon.icns', resources_path) if icon_path is not None else None
-    app_name = os.path.splitext(os.path.basename(app_path))[0]
     if executable_root_path is not None:
         app_executable_path = os.path.relpath(executable_path, executable_root_path)
     else:
@@ -354,6 +387,9 @@ def create_app(
     write_info_plist()
     write_pkg_info()
     set_file_permissions()
+    if dmg_requested:
+        create_dmg(app_name, app_path, dmg_path)
+        tmp_dir_wrapper.close()
 
 
 def main():
