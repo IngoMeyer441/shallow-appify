@@ -54,7 +54,7 @@ python __startup__.py
 '''.strip()
 
 PY_STARTUP_SCRIPT = '''
-#!/usr/bin/env python
+{{ shebang }}
 # coding: utf-8
 
 from __future__ import unicode_literals
@@ -199,9 +199,9 @@ def pre_create_app(**kwargs):
 
 
 def setup_startup(app_path, executable_path, app_executable_path, executable_root_path, macos_path, resources_path):
-    def create_python_startup_script(main_module):
+    def create_python_startup_script(main_module, shebang):
         template = Template(PY_STARTUP_SCRIPT)
-        startup_script = template.render(main_module=main_module)
+        startup_script = template.render(main_module=main_module, shebang=shebang)
         return startup_script
 
     def patch_lib_python(env_path):
@@ -424,7 +424,11 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 raise ExtensionModuleError('Extension modules could not be built.')
 
     main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
-    python_startup_script = create_python_startup_script(main_module)
+    with codecs.open(executable_path, 'r', 'utf-8') as f:
+        shebang = f.readline().strip()
+    if not shebang.startswith('#!'):
+        shebang = '#!/usr/bin/env python'
+    python_startup_script = create_python_startup_script(main_module, shebang)
     with codecs.open(os.path.join(macos_path, _PY_STARTUP_SCRIPT_NAME), 'w', 'utf-8') as f:
         f.write(python_startup_script)
     if _create_conda_env:
