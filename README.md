@@ -6,6 +6,22 @@ Converts any executable to a non-self-contained mac app bundle which depends on 
 have problems when complex dependencies (e.g. PyQt) must be included. shallow-appify avoids these problems by
 referencing present system libraries.
 
+## Installation
+
+The latest version is available from PyPI:
+
+```bash
+pip install shallow-appify
+```
+
+If you use Arch Linux or one of its derivatives, you can also install `shallow-appify` from the
+[AUR](https://aur.archlinux.org/packages/shallow-appify/):
+
+```bash
+yay -S shallow-appify
+```
+
+
 ## Usage
 
     usage: shallow-appify [-h] [-d EXECUTABLE_ROOT_PATH]
