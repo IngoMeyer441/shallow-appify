@@ -1,12 +1,6 @@
-._*
-.DS_Store
+.*
 *.pyc
-*.pyo
-*.o
-*.a
-*.so
-*.swp
-*.swo
 __pycache__/
-/dist/
-/*.egg-info/
+build/
+dist/
+*.egg-info/
