@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 from __future__ import division
 from __future__ import absolute_import
 
+import codecs
 import fnmatch
 import itertools
 import os
@@ -53,7 +54,7 @@ python __startup__.py
 '''.strip()
 
 PY_STARTUP_SCRIPT = '''
-#!/usr/bin/env python
+{{ shebang }}
 # coding: utf-8
 
 from __future__ import unicode_literals
@@ -176,7 +177,7 @@ def parse_command_line_arguments(args):
     global _create_conda_env, _requirements_file, _conda_channels, _extension_makefile, _conda_gr_included
 
     def is_gr_in_conda_requirements(requirements_file):
-        with open(requirements_file, 'r') as f:
+        with codecs.open(requirements_file, 'r', 'utf-8') as f:
             found_gr = any((line.startswith('gr=') for line in f))
         return found_gr
 
@@ -198,27 +199,25 @@ def pre_create_app(**kwargs):
 
 
 def setup_startup(app_path, executable_path, app_executable_path, executable_root_path, macos_path, resources_path):
-    def create_python_startup_script(main_module):
+    def create_python_startup_script(main_module, shebang):
         template = Template(PY_STARTUP_SCRIPT)
-        startup_script = template.render(main_module=main_module)
+        startup_script = template.render(main_module=main_module, shebang=shebang)
         return startup_script
 
     def patch_lib_python(env_path):
         env_path = os.path.abspath(env_path)
-        python_dir_path = '{env_path}/bin'.format(env_path=env_path)
+        python_dir_path = os.path.join(env_path, 'bin')
         lib_pattern = 'libpython*.dylib'
-        lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
+        lib_dir_path = os.path.join(env_path, 'lib')
         python_lib_pathes = tuple(
             [
-                '{lib_dir_path}/{path}'.format(lib_dir_path=lib_dir_path, path=path)
+                os.path.join(lib_dir_path, path)
                 for path in os.listdir(lib_dir_path) if fnmatch.fnmatch(path, lib_pattern)
             ]
         )
         for python_lib_path in python_lib_pathes:
-            rel_python_lib_path = '@executable_path/{rel_path}'.format(
-                rel_path=os.path.relpath(python_lib_path, python_dir_path)
-            )
-            with open(os.devnull, 'w') as dummy:
+            rel_python_lib_path = os.path.join('@executable_path', os.path.relpath(python_lib_path, python_dir_path))
+            with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
                 try:
                     subprocess.check_call(
                         ['install_name_tool', '-id', rel_python_lib_path, python_lib_path], stdout=dummy, stderr=dummy
@@ -229,8 +228,8 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
     def create_conda_env():
         def create_env():
             conda_channels = _conda_channels or []
-            with open(os.devnull, 'w') as dummy:
-                env_path = '{resources}/{env}'.format(resources=resources_path, env='conda_env')
+            with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
+                env_path = os.path.join(resources_path, 'conda_env')
                 try:
                     subprocess.check_call(
                         ['conda', 'create', '-p', env_path, '--file', _requirements_file, '--copy', '--quiet', '--yes']
@@ -241,8 +240,9 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                     subprocess.check_call(
                         ' '.join(
                             [
-                                'source', '{env_path}/bin/activate'.format(env_path=env_path), env_path, ';', 'conda',
-                                'install', '--copy', '--quiet', '--yes'
+                                'source',
+                                os.path.join(env_path, 'bin/activate'), env_path, ';', 'conda', 'install', '--copy',
+                                '--quiet', '--yes'
                             ] + list(_CONDA_DEFAULT_PACKAGES) +
                             list(itertools.chain(*[('-c', channel) for channel in _CONDA_DEFAULT_CHANNELS]))
                         ),
@@ -289,14 +289,12 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
             DELETE_LINE_COUNT = 5
             REPLACE_LINE_PART = '_NEW_PART='
             REPLACE_LINE_INSERT = '_NEW_PART=$_CONDA_DIR'
-            full_conda_activate_path = '{env_path}/{conda_activate_path}'.format(
-                env_path=env_path, conda_activate_path=CONDA_ACTIVATE_PATH
-            )
+            full_conda_activate_path = os.path.join(env_path, CONDA_ACTIVATE_PATH)
             found_line_to_delete = False
             found_line_to_replace = False
             skip_line_num = 0
             new_lines = []
-            with open(full_conda_activate_path, 'r') as f:
+            with codecs.open(full_conda_activate_path, 'r', 'utf-8') as f:
                 for line in f:
                     if skip_line_num > 0:
                         skip_line_num -= 1
@@ -312,16 +310,16 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                             new_lines.append('{}\n'.format(REPLACE_LINE_INSERT))
                             continue
                     new_lines.append(line)
-            with open(full_conda_activate_path, 'w') as f:
+            with codecs.open(full_conda_activate_path, 'w', 'utf-8') as f:
                 f.writelines(new_lines)
 
         def fix_conda_shebang():
-            full_conda_bin_path = '{env_path}/{conda_bin_path}'.format(env_path=env_path, conda_bin_path=CONDA_BIN_PATH)
-            with open(full_conda_bin_path, 'r') as f:
+            full_conda_bin_path = os.path.join(env_path, CONDA_BIN_PATH)
+            with codecs.open(full_conda_bin_path, 'r', 'utf-8') as f:
                 lines = f.readlines()
             # replace shebang line
             lines[0] = '#!/usr/bin/env python\n'
-            with open(full_conda_bin_path, 'w') as f:
+            with codecs.open(full_conda_bin_path, 'w', 'utf-8') as f:
                 f.writelines(lines)
 
         def copy_missing_conda_packages():
@@ -332,7 +330,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 anaconda_dir_path = None
                 system_conda_bin_path = command.which('conda')
                 if system_conda_bin_path:
-                    with open(system_conda_bin_path, 'r') as f:
+                    with codecs.open(system_conda_bin_path, 'r', 'utf-8') as f:
                         shebang_line = f.readline()
                     match_obj = re.match('#!(.*)/bin/python', shebang_line)
                     if match_obj:
@@ -340,25 +338,18 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 return anaconda_dir_path
 
             system_anaconda_root_path = get_system_anaconda_root_path()
-            full_anaconda_python_packages_path = '{system_anaconda_root}/{relative_packages_path}'.format(
-                system_anaconda_root=system_anaconda_root_path, relative_packages_path=ANACONDA_PYTHON_PACKAGES_PATH
-            )
-            full_condaenv_python_packages_path = '{env_path}/{relative_packages_path}'.format(
-                env_path=env_path, relative_packages_path=CONDAENV_PYTHON_PACKAGES_PATH
-            )
+            full_anaconda_python_packages_path = os.path.join(system_anaconda_root_path, ANACONDA_PYTHON_PACKAGES_PATH)
+            full_condaenv_python_packages_path = os.path.join(env_path, CONDAENV_PYTHON_PACKAGES_PATH)
             for package in CONDA_MISSING_PACKAGES:
                 shutil.copytree(
-                    '{system_anaconda_packages_root_path}/{package}'.format(
-                        system_anaconda_packages_root_path=full_anaconda_python_packages_path, package=package
-                    ), '{condaenv_packages_root_path}/{package}'.format(
-                        condaenv_packages_root_path=full_condaenv_python_packages_path, package=package
-                    )
+                    os.path.join(full_anaconda_python_packages_path, package),
+                    os.path.join(full_condaenv_python_packages_path, package)
                 )
 
         def fix_application_path_prefix():
             app_name = os.path.splitext(os.path.basename(app_path))[0]
             target_application_path_prefix = '/Applications/{app_name}.app'.format(app_name=app_name)
-            current_application_path_prefix = os.path.abspath('{env_path}/../../..'.format(env_path=env_path))
+            current_application_path_prefix = os.path.abspath(os.path.join(env_path, '../../..'))
             matching_files = subprocess.check_output(
                 ['grep', '-rl', "--exclude='*.pyc'", current_application_path_prefix, env_path]
             ).strip().split('\n')
@@ -376,7 +367,7 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 subprocess.check_call(['sed', '-i', '', sed_pattern, text_file])
             for binary_file in binary_files:
                 binary_replace(binary_file, current_application_path_prefix, target_application_path_prefix)
-            with open('{env_path}/../application_path_prefix'.format(env_path=env_path), 'w') as f:
+            with codecs.open(os.path.join(env_path, '../application_path_prefix'), 'w', 'utf-8') as f:
                 f.write(target_application_path_prefix)
 
         fix_links_to_system_files()
@@ -387,20 +378,20 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
 
     def fix_conda_gr(env_path):
         def create_missing_library_links():
-            library_directory = '{env_path}/lib'.format(env_path=env_path)
-            site_package_directory = '{env_path}/lib/python2.7/site-packages'.format(env_path=env_path)
+            library_directory = os.path.join(env_path, 'lib')
+            site_package_directory = os.path.join(env_path, 'lib/python2.7/site-packages')
             for rel_lib_path in ('gr/libGR.so', 'gr3/libGR3.so'):
                 os.symlink(
                     os.path.relpath(
-                        '{site_packages}/{lib}'.format(site_packages=site_package_directory, lib=rel_lib_path),
+                        os.path.join(site_package_directory, rel_lib_path),
                         library_directory
-                    ), '{lib}/{name}'.format(lib=library_directory, name=os.path.basename(rel_lib_path))
+                    ), os.path.join(library_directory, os.path.basename(rel_lib_path))
                 )
 
         create_missing_library_links()
 
     def precompile_python_files():
-        with open(os.devnull, 'w') as dummy:
+        with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
             try:
                 subprocess.check_call(['python', '-m', 'compileall', macos_path], stdout=dummy, stderr=dummy)
             except subprocess.CalledProcessError:
@@ -410,18 +401,16 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         def get_makefile_path():
             if executable_root_path is not None and \
                _extension_makefile.startswith(os.path.abspath(executable_root_path)):
-                makefile_path = '{macos_path}/{rel_makefile_path}'.format(
-                    macos_path=macos_path, rel_makefile_path=os.path.relpath(_extension_makefile, executable_root_path)
-                )
+                makefile_path = os.path.join(macos_path, os.path.relpath(_extension_makefile, executable_root_path))
             else:
                 makefile_path = _extension_makefile
             return makefile_path
 
         env_path = os.path.abspath(env_path)
-        lib_dir_path = '{env_path}/lib'.format(env_path=env_path)
+        lib_dir_path = os.path.join(env_path, 'lib')
         makefile_path = get_makefile_path()
         makefile_dir_path = os.path.dirname(makefile_path)
-        with open(os.devnull, 'w') as dummy:
+        with codecs.open(os.devnull, 'w', 'utf-8') as dummy:
             try:
                 subprocess.check_call(
                     [
@@ -435,9 +424,13 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
                 raise ExtensionModuleError('Extension modules could not be built.')
 
     main_module = os.path.splitext(app_executable_path)[0].replace('/', '.')
-    python_startup_script = create_python_startup_script(main_module)
-    with open('{macos}/{startup}'.format(macos=macos_path, startup=_PY_STARTUP_SCRIPT_NAME), 'w') as f:
-        f.writelines(python_startup_script.encode('utf-8'))
+    with codecs.open(executable_path, 'r', 'utf-8') as f:
+        shebang = f.readline().strip()
+    if not shebang.startswith('#!'):
+        shebang = '#!/usr/bin/env python'
+    python_startup_script = create_python_startup_script(main_module, shebang)
+    with codecs.open(os.path.join(macos_path, _PY_STARTUP_SCRIPT_NAME), 'w', 'utf-8') as f:
+        f.write(python_startup_script)
     if _create_conda_env:
         env_path = create_conda_env()
         make_conda_portable(env_path)
@@ -447,11 +440,12 @@ def setup_startup(app_path, executable_path, app_executable_path, executable_roo
         if _extension_makefile is not None:
             build_extension_modules(env_path)
         env_startup_script = PY_PRE_STARTUP_CONDA_SETUP
-        with open('{macos}/{startup}'.format(macos=macos_path, startup=_ENV_STARTUP_SCRIPT_NAME), 'w') as f:
-            f.writelines(env_startup_script.encode('utf-8'))
+        with codecs.open(os.path.join(macos_path, _ENV_STARTUP_SCRIPT_NAME), 'w',
+                         'utf-8') as f:
+            f.write(env_startup_script)
         shutil.copy(
-            '{base_dir}/util/binary_replace.py'.format(base_dir=os.path.dirname(__file__)),
-            '{resources}/binary_replace.py'.format(resources=resources_path)
+            os.path.join(os.path.dirname(__file__), 'util/binary_replace.py'),
+            os.path.join(resources_path, 'binary_replace.py')
         )
         new_executable_path = _ENV_STARTUP_SCRIPT_NAME
     else:
