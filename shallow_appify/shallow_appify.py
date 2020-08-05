@@ -21,8 +21,8 @@ from PIL import Image
 from . import plugins
 logging.basicConfig(level=logging.WARNING)
 
-__author__ = 'Ingo Heimbach'
-__email__ = 'i.heimbach@fz-juelich.de'
+__author__ = 'Ingo Meyer'
+__email__ = 'i.meyer@fz-juelich.de'
 
 INFO_PLIST_TEMPLATE = '''
 <?xml version="1.0" encoding="UTF-8"?>

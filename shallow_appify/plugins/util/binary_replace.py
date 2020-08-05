@@ -9,8 +9,8 @@ from __future__ import unicode_literals
 import re
 import sys
 
-__author__ = 'Ingo Heimbach'
-__email__ = 'i.heimbach@fz-juelich.de'
+__author__ = 'Ingo Meyer'
+__email__ = 'i.meyer@fz-juelich.de'
 
 PY2 = (sys.version_info.major < 3)
 if PY2:

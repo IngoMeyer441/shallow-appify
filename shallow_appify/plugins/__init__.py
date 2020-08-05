@@ -8,8 +8,8 @@ from __future__ import absolute_import
 import importlib
 import pkgutil
 
-__author__ = 'Ingo Heimbach'
-__email__ = 'i.heimbach@fz-juelich.de'
+__author__ = 'Ingo Meyer'
+__email__ = 'i.meyer@fz-juelich.de'
 
 _modules = None
 _ext2module = None
